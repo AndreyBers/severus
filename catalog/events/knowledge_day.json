@@ -1,0 +1,13 @@
+{
+  "id": "knowledge_day",
+  "title": "День знаний",
+  "category": "federal",
+  "aliases": ["1 сентября"],
+  "supported_age_groups": ["1-4", "5-8", "9-11"],
+  "supported_formats": [
+    "class_hour",
+    "school_event",
+    "interactive_lesson"
+  ],
+  "catalog_version": "0.1"
+}
