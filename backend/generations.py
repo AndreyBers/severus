@@ -44,7 +44,11 @@ def create_generation(request: GenerationRequest, background_tasks: BackgroundTa
     if event is None:
         raise HTTPException(
             status_code=422,
-            detail="Неизвестное мероприятие",
+            detail={
+                "code": "EVENT_NOT_FOUND",
+                "message": "Неизвестное мероприятие",
+                "field": "event_id",
+            },
         )
 
     if request.grade_group not in event.supported_age_groups:
