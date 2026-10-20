@@ -1,3 +1,4 @@
+from backend.openapi_docs import configure_openapi
 from backend.errors import register_error_handlers
 from fastapi import FastAPI
 
@@ -18,6 +19,7 @@ app.include_router(generations_router)
 app.include_router(catalog_options_router)
 register_error_handlers(app)
 configure_cors(app)
+configure_openapi(app)
 
 
 @app.get("/api/v1/health")
