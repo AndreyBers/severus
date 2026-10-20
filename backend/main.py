@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from backend.catalog import router as catalog_router
 from backend.generations import router as generations_router
 from backend.catalog_options import router as catalog_options_router
+from backend.cors import configure_cors
 
 
 app = FastAPI(
@@ -16,6 +17,7 @@ app.include_router(catalog_router)
 app.include_router(generations_router)
 app.include_router(catalog_options_router)
 register_error_handlers(app)
+configure_cors(app)
 
 
 @app.get("/api/v1/health")
