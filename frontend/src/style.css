@@ -1037,3 +1037,67 @@ background-size:270% 100%!important;background-clip:text!important;-webkit-backg
   color: #0b5748 !important;
   animation: none !important;
 }
+
+/* v30: workshop label centered under the page crystal (desktop). */
+.app-shell .topbar { position: relative; }
+.app-shell .topbar-mid {
+ position: absolute !important;
+ left: 50% !important;
+ top: 67px !important;
+ transform: translate(-50%, -50%) !important;
+ margin: 0 !important;
+ width: max-content !important;
+ max-width: calc(100% - 360px) !important;
+ align-items: center !important;
+ justify-content: center !important;
+ white-space: nowrap !important;
+ z-index: 4 !important;
+}
+/* Preserve existing emerald animation of the nested selected-text-glint. */
+@media(max-width:800px) and (min-width:651px) {
+ .app-shell .topbar-mid {font-size:9px!important;gap:4px!important;letter-spacing:.06em!important;max-width:calc(100% - 250px)!important}
+}
+@media(max-width:650px) {
+ .app-shell .topbar-mid {display:none!important}
+}
+
+/* v31 — requested header and copy action refinements. */
+/* Keep the static emerald gradient on the site name, consistent with page headings. */
+.app-shell .topbar .brand span:last-child {
+  display: inline-block !important;
+  background: linear-gradient(105deg, #073d35 0%, #0b5748 26%, #118b6d 49%, #24b995 64%, #0c6652 83%, #073d35 100%) !important;
+  background-size: 100% 100% !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  color: #0b5748 !important;
+  animation: none !important;
+}
+/* Slight optical correction, while preserving crystal-centered layout and animated text. */
+.app-shell .topbar-mid {
+  left: calc(50% + 8px) !important;
+}
+/* Make Copy plan match the emerald action buttons, with movement on hover only. */
+.app-shell .result-aside .copy {
+  background: #0e5847 !important;
+  color: #fff !important;
+  -webkit-text-fill-color: #fff !important;
+  border: 1px solid #19775d !important;
+  box-shadow: 0 8px 18px rgba(11,81,59,.16) !important;
+  transition: background-position .45s ease, transform .25s ease, box-shadow .25s ease !important;
+  background-image: linear-gradient(110deg, #0b4d3e 0%, #106f55 38%, #2ab595 51%, #0f765c 66%, #0b4d3e 100%) !important;
+  background-size: 220% 100% !important;
+  background-position: 100% 50% !important;
+}
+.app-shell .result-aside .copy:hover:not(:disabled) {
+  background-position: 0% 50% !important;
+  box-shadow: 0 9px 25px rgba(14,133,100,.32) !important;
+  transform: translateY(-2px) !important;
+}
+.app-shell .result-aside .copy svg {color: #fff !important; stroke: #fff !important;}
+@media (prefers-reduced-motion: reduce) {
+  .app-shell .result-aside .copy { transition: none !important; }
+  .app-shell .result-aside .copy:hover:not(:disabled) {transform: none !important;}
+}
