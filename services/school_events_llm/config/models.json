@@ -111,20 +111,6 @@
       "local": false,
       "enabled": true
     },
-    "urfu_qwen3_32b_abliterated": {
-      "provider": "openai_compatible",
-      "base_url": null,
-      "base_url_env": "LITELLM_BASE_URL",
-      "model_id": "Qwen3-32B-abliterated",
-      "api_key_env": "LITELLM_API_KEY",
-      "timeout_seconds": 300,
-      "max_concurrency": 1,
-      "structured_output_mode": "auto",
-      "reasoning_mode": "disabled",
-      "disable_thinking_method": "strip_only",
-      "local": false,
-      "enabled": false
-    },
     "urfu_qwen_27b_uncensored": {
       "provider": "openai_compatible",
       "base_url": null,
@@ -138,6 +124,20 @@
       "disable_thinking_method": "strip_only",
       "local": false,
       "enabled": false
+    },
+    "urfu_gigachat_3_lightning": {
+      "provider": "openai_compatible",
+      "base_url": null,
+      "base_url_env": "LITELLM_BASE_URL",
+      "model_id": "GigaChat-3-Lightning",
+      "api_key_env": "LITELLM_API_KEY",
+      "timeout_seconds": 300,
+      "max_concurrency": 1,
+      "structured_output_mode": "auto",
+      "reasoning_mode": "provider_default",
+      "disable_thinking_method": "strip_only",
+      "local": false,
+      "enabled": true
     }
   }
 }
