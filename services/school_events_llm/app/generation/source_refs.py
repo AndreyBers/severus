@@ -115,6 +115,15 @@ _GROUP_WITH_ID = re.compile(r"[ \t]*[(\[](?P<inner>[^()\[\]\n]*?\b(?:frag|src)_[
 _ID_LABELS = re.compile(r"fact_claims?|fragment_id|source_id|claim_id|источник\w*|фрагмент\w*|см\.?|согласно|по|и|and", re.I)
 # ID без скобок: «Согласно frag_new_year_001, …», «… (источник frag_x)» уже убраны группой.
 _BARE_ID = re.compile(r"(?:\b(?:согласно|по\s+данным|см\.?|источник\w*:?|фрагмент\w*:?)[ \t]+)?\b(?:frag|src)_[a-z0-9_]+(?:[ \t]*[,;][ \t]*\b(?:frag|src)_[a-z0-9_]+)*[,;:]?", re.I)
+# Кусок JSON со ссылками прямо в тексте материала (прогон 15.11, карточка станции о Свердловской области):
+# «fact_claims: [ { "source_id": "src_…", "fragment_id": "frag_…" }, … ]» или один объект `{…}`.
+# Убирается целиком, даже если ID внутри пустые; подпись перед ним - тоже.
+_REF_JSON = re.compile(
+    r"[ \t]*(?:\b(?:fact_claims?|sources?|источник\w*)\s*:\s*)?"
+    r"(?:\[\s*(?:\{[^{}\[\]]*\}\s*,?\s*)+\]|\{[^{}\[\]]*\})",
+    re.I,
+)
+_REF_JSON_KEYS = re.compile(r"[\"']?\b(?:source_id|fragment_id|claim_id)\b[\"']?\s*:", re.I)
 _LIST_MARK = re.compile(r"^\s*(?:[-\u2013\u2014\u2022*]|\d{1,2}[.)])\s*")
 _SENTENCE_END = re.compile(r"[.!?](?=\s|$)")
 
@@ -204,9 +213,35 @@ def move_source_refs(variant: dict[str, Any], fragments: list[dict[str, Any]]) -
     claims = variant.setdefault("fact_claims", [])
     known = {(c.get("text") or "").strip().lower() for c in claims}
 
+    def register(claim: str, fragment: dict[str, Any] | None, registered: list[str]) -> bool:
+        if not fragment or not claim or claim.lower() in known or not _supported(claim, fragment):
+            return False
+        claim_id = f"fc_{len(claims) + 1:02d}"
+        claims.append({"claim_id": claim_id, "text": claim, "location": location_of[0],
+                       "source_id": fragment["source_id"], "fragment_id": fragment["fragment_id"],
+                       "needs_teacher_check": False})
+        known.add(claim.lower())
+        registered.append(claim_id)
+        return True
+
+    location_of = [""]
+
     def fix(text: str, where: str, location: str) -> str:
         refs: list[str] = []
         registered: list[str] = []
+        location_of[0] = location
+        # Кусок JSON со ссылками: факт перед ним записывается с первым подходящим фрагментом, сам кусок убирается.
+        blocks = [m for m in _REF_JSON.finditer(text) if _REF_JSON_KEYS.search(m.group(0))]
+        for match in reversed(blocks):
+            ids = [m.group(0).lower() for m in _ANY_ID.finditer(match.group(0))]
+            refs.append("/".join(ids) or "fact_claims: []")
+            claim = _claim_before(text, match.start())
+            if _YEAR.search(claim) or _DATE.search(claim):
+                for ref in ids:
+                    fragment = _resolve(ref if ref.startswith("src_") else None, ref if ref.startswith("frag_") else None, fragments)
+                    if register(claim, fragment, registered):
+                        break
+            text = text[:match.start()] + text[match.end():]
         # Сначала ссылки в скобках, потом без скобок: одна ссылка не считается дважды.
         for rx in (_REF, _BARE_REF):
             matches = list(rx.finditer(text))

@@ -14,7 +14,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from .ids import KEY_RU, _singular
+from .ids import _THING_RU, KEY_RU, _singular
 
 # Названия типов материалов для текста, если материала с таким ID в варианте нет.
 MATERIAL_TYPE_TITLES = {
@@ -109,8 +109,9 @@ def build_names(variant: dict[str, Any], dependencies: dict[str, dict[str, Any]]
 def _token_pattern(names: dict[str, str]) -> re.Pattern[str]:
     singles = sorted((k for k in names if "_" not in k), key=len, reverse=True)
     alternatives = [_SNAKE] + [re.escape(s) for s in singles]
-    # Не часть слова, пути или адреса: слева нет буквы, цифры, «/», «.», «_»; справа нет буквы, цифры, «/», «_».
-    return re.compile(_LEFT + r"(?:" + "|".join(alternatives) + r")(?![\w/])")
+    # Не часть слова, пути, адреса или имени файла: слева нет буквы, цифры, «/», «.», «_»; справа нет буквы,
+    # цифры, «/», «_» и расширения («task_card.pdf»).
+    return re.compile(_LEFT + r"(?:" + "|".join(alternatives) + r")(?![\w/])(?!\.[A-Za-z0-9])")
 
 
 def _stem(text: str) -> str:
@@ -118,42 +119,121 @@ def _stem(text: str) -> str:
     return word[:5] if len(word) >= 5 else word
 
 
-def _shape(key: str) -> str:
-    """ID без различий в числе частей: «commitments_book_pages» и «commitment_book_page» дают одно и то же."""
-    return "_".join(_singular(part) for part in key.split("_"))
+def _words(key: str) -> tuple[str, ...]:
+    """Слова ID без числа и порядка: «commitments_book_pages», «page_book_commitment» - одно и то же."""
+    return tuple(sorted(_singular(part) for part in key.split("_") if part))
 
 
-def _by_shape(names: dict[str, str]) -> dict[str, str]:
-    """`_shape(ID) -> ID` для составных ID; если под одну форму подходят два ID, форма не используется."""
-    found: dict[str, str | None] = {}
-    for key in names:
-        if "_" in key:
-            shape = _shape(key)
-            found[shape] = key if shape not in found else None
-    return {shape: key for shape, key in found.items() if key}
+def _one_edit(a: str, b: str) -> bool:
+    """Слова отличаются одной буквой (замена, лишняя, пропущенная) или перестановкой соседних букв."""
+    if a == b or abs(len(a) - len(b)) > 1:
+        return False
+    if len(a) == len(b):
+        diff = [i for i in range(len(a)) if a[i] != b[i]]
+        return len(diff) == 1 or (len(diff) == 2 and diff[1] == diff[0] + 1 and a[diff[0]] == b[diff[1]] and a[diff[1]] == b[diff[0]])
+    short, long_ = (a, b) if len(a) < len(b) else (b, a)
+    return any(long_[:i] + long_[i + 1:] == short for i in range(len(long_)))
 
 
-def humanize_text(text: str, names: dict[str, str]) -> tuple[str, list[str]]:
+# Слова, которые меняют смысл материала: «quiz_answer_cards» - ключ ответов, а не карточки викторины.
+# Если лишнее слово из этого списка, ступень `extra_word` материал не подставляет.
+_MEANING_WORDS = {"answer", "key", "solution", "result", "score", "scorecard", "vote", "ballot", "jury", "award",
+                  "parent", "teacher", "pupil", "student", "family", "audience", "helper", "guest", "empty", "blank",
+                  "instruction", "memo", "checklist"}
+
+
+class IdMatcher:
+    """Поиск ID в тексте по ступеням, от строгой к мягкой (QA 14.11 BUG-16 и прогон 15.11: модель пишет ID
+    материала с ошибкой - «commitments_book_pages», «task_card» при «card_task»).
+
+    1. `exact` - ID как есть.
+    2. `words` - те же слова в другом числе и порядке: «task_cards» = «card_task».
+    3. `extra_word` - одно слово лишнее или пропущено при двух и больше общих: «station_card» = «station_cards_set»;
+       если это слово меняет смысл (`_MEANING_WORDS`: ответы, жюри, родители…), не подставляется.
+    4. `typo` - в одном слове из 5 и больше букв одна буква не та или две соседние переставлены:
+       «commitmnet_book_pages». «situation_cards» - не «station_cards», «route_cards» - не «vote_cards».
+    5. `dictionary` - материала нет, но расходник знакомый: «colored_cardboards» - «цветной картон».
+
+    Нестрого ищутся только материалы и расходники; роли, блоки и типы - только точно.
+
+    На ступенях 2-4 подставляется только единственный кандидат: если подходят два ID, ничего не угадывается
+    (ID остаётся, его покажет TECH-ID-IN-TEXT). Цифры должны совпадать: «block_03» - не «block_04».
+    """
+
+    def __init__(self, names: dict[str, str], fuzzy_keys: set[str] | None = None):
+        """`fuzzy_keys` - ID, которые можно найти нестрого (материалы и расходники); роли и блоки - только точно:
+        «parent_helper_instructions» - памятка, а не роль «parent_helpers»."""
+        self.names = names
+        self.compound = {key: _words(key) for key in names
+                         if "_" in key and (fuzzy_keys is None or key in fuzzy_keys)}
+
+    def _unique(self, candidates: list[str]) -> str | None:
+        return candidates[0] if len(set(candidates)) == 1 else None
+
+    @staticmethod
+    def _typo(words: tuple[str, ...], other: tuple[str, ...]) -> bool:
+        """Отличается ровно одно слово, оно не короче 5 букв и отличается одной правкой (`_one_edit`)."""
+        if len(words) != len(other):
+            return False
+        mine, theirs = list(words), list(other)
+        for word in words:
+            if word in theirs:
+                mine.remove(word)
+                theirs.remove(word)
+        return len(mine) == 1 and min(len(mine[0]), len(theirs[0])) >= 5 and _one_edit(mine[0], theirs[0])
+
+    def find(self, token: str) -> tuple[str, str | None, str] | None:
+        """(текст для подстановки, найденный ID или None, ступень) либо None."""
+        if token in self.names:
+            return self.names[token], token, "exact"
+        if "_" not in token:
+            return None
+        words = _words(token)
+        digits = re.findall(r"\d+", token)
+        same_digits = {key: kw for key, kw in self.compound.items() if re.findall(r"\d+", key) == digits}
+        key = self._unique([k for k, kw in same_digits.items() if kw == words])
+        if key:
+            return self.names[key], key, "words"
+        mine = set(words)
+        key = self._unique([k for k, kw in same_digits.items()
+                            if len(mine & set(kw)) >= 2 and len(mine ^ set(kw)) == 1
+                            and not (mine ^ set(kw)) & _MEANING_WORDS])
+        if key:
+            return self.names[key], key, "extra_word"
+        key = self._unique([k for k, kw in same_digits.items() if self._typo(words, kw)])
+        if key:
+            return self.names[key], key, "typo"
+        for candidate in (token, "_".join(_singular(part) for part in token.split("_"))):
+            if candidate in _THING_RU:
+                return _THING_RU[candidate], None, "dictionary"
+        return None
+
+
+def humanize_text(text: str, names: dict[str, str], matched: dict[str, str] | None = None,
+                  fuzzy_keys: set[str] | None = None) -> tuple[str, list[str]]:
     """Заменяет известные ID в одном тексте. Возвращает новый текст и список заменённых ID.
 
-    ID, который отличается от известного только числом частей («commitments_book_pages» при материале
-    «commitment_book_pages», замечание QA 14.11, BUG-16), заменяется названием этого материала.
+    ID ищется по ступеням `IdMatcher`: кроме точного совпадения - те же слова в другом числе и порядке,
+    одно лишнее слово, опечатка, знакомый расходник. Нестрогие замены записываются в `matched`
+    («task_card» -> «card_task (words)»), чтобы их было видно в трассе.
     """
     if not text or not names:
         return text, []
     pattern = _token_pattern(names)
-    shapes = _by_shape(names)
+    matcher = IdMatcher(names, fuzzy_keys)
     urls = [m.span() for m in _URL.finditer(text)]
     replaced: list[str] = []
     out: list[str] = []
     pos = 0
     for m in pattern.finditer(text):
         token = m.group(0)
-        key = token if token in names else shapes.get(_shape(token)) if "_" in token else None
-        if not key or any(a <= m.start() < b for a, b in urls):
+        found = matcher.find(token)
+        if not found or any(a <= m.start() < b for a, b in urls):
             continue
+        title, key, method = found
+        if method != "exact" and matched is not None:
+            matched[token] = f"{key} ({method})" if key else f"{title} ({method})"
         start, end = m.start(), m.end()
-        title = names[key]
         # Кавычки и обратные апострофы вокруг ID: `card_task`, "card_task", «card_task».
         if start > 0 and end < len(text) and text[start - 1] in _QUOTES and text[end] in _QUOTES:
             start, end = start - 1, end + 1
@@ -201,22 +281,32 @@ def humanize_variant(variant: dict[str, Any], dependencies: dict[str, dict[str, 
                      planned: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
     """Заменяет технические ID во всех текстовых полях варианта (на месте). Возвращает список замен для трассы."""
     names = build_names(variant, dependencies, planned)
+    fuzzy = ({m.get("material_id") for m in variant.get("materials") or []} | {p.get("material_id") for p in planned or []}
+             | set(dependencies or {}) | set(MATERIAL_TYPE_TITLES))
     changes: list[dict[str, Any]] = []
+
+    def record(where: str, ids: list[str], matched: dict[str, str]) -> None:
+        change: dict[str, Any] = {"field": where, "ids": ids}
+        if matched:
+            change["matched"] = matched  # нестрогие замены: что было и на что заменено
+        changes.append(change)
 
     def fix(container: dict[str, Any], key: str, where: str) -> None:
         value = container.get(key)
         if isinstance(value, str):
-            new, ids = humanize_text(value, names)
+            matched: dict[str, str] = {}
+            new, ids = humanize_text(value, names, matched, fuzzy)
             if ids:
                 container[key] = new
-                changes.append({"field": where, "ids": ids})
+                record(where, ids, matched)
         elif isinstance(value, list):
             for index, item in enumerate(value):
                 if isinstance(item, str):
-                    new, ids = humanize_text(item, names)
+                    matched = {}
+                    new, ids = humanize_text(item, names, matched, fuzzy)
                     if ids:
                         value[index] = new
-                        changes.append({"field": f"{where}[{index}]", "ids": ids})
+                        record(f"{where}[{index}]", ids, matched)
 
     concept = variant.get("concept") or {}
     for key in ("summary", "goal", "tasks", "expected_outcomes"):
