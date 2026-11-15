@@ -84,7 +84,7 @@ class LLMServiceClient:
                 headers=self._headers(request_id, idempotency_key),
                 timeout=self.timeout_seconds,
             )
-        except (httpx.ConnectError, httpx.TimeoutException, httpx.NetworkError) as exc:
+        except httpx.RequestError as exc:
             raise HTTPException(
                 status_code=503,
                 detail={
@@ -95,7 +95,29 @@ class LLMServiceClient:
                 },
             ) from exc
         self._raise_service_error(response)
-        return response.json()
+        try:
+            result = response.json()
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=502,
+                detail={
+                    "code": "LLM_SERVICE_ERROR",
+                    "message": "LLM-сервис вернул некорректный JSON",
+                    "field": None,
+                    "retryable": True,
+                },
+            ) from exc
+        if not isinstance(result, dict):
+            raise HTTPException(
+                status_code=502,
+                detail={
+                    "code": "LLM_SERVICE_ERROR",
+                    "message": "LLM-сервис вернул неожиданный формат ответа",
+                    "field": None,
+                    "retryable": True,
+                },
+            )
+        return result
 
     def create_generation(self, payload: dict[str, Any], *, request_id: str | None = None,
                           idempotency_key: str | None = None) -> dict[str, Any]:
