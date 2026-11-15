@@ -899,8 +899,8 @@ class Generator:
             mark = "  ← ТЕКУЩИЙ БЛОК" if focus_block == b["block_id"] else ""
             size = f" | реплики педагога: {script_chars(dur)}" if script_chars else ""
             mats = ", ".join(titles.get(mid, mid) for mid in b["planned_material_ids"]) or "-"
-            following = plan["blocks"][index + 1] if index + 1 < len(plan["blocks"]) else None
-            budget = presentation_budget(mode, sizes, b, dur, plan["grouping_request"].get("block_ids", []), following) if timing_hints else ""
+            budget = (presentation_budget(mode, sizes, b, dur, plan["grouping_request"].get("block_ids", []), plan["blocks"][index + 1:])
+                      if timing_hints else "")
             budget = f" | {budget}" if budget else ""
             lines.append(f"- `{b['block_id']}` | {start}–{start + dur} мин ({dur}) | {b['title']} | цель: {b['purpose']} | "
                          f"роли: {', '.join(b['role_ids'])} | материалы: {mats}{size}{budget}{mark}")
@@ -1386,7 +1386,7 @@ class Generator:
         project_id = project_id or ("evt_" + job_id[4:])
         n = normalize(raw_request, self.catalog, self.settings, context_mode=context_mode, cultural_context=cultural_context,
                       experiment_tag=experiment_tag, experiment_pair_id=experiment_pair_id)
-        meta = {"job_id": job_id}
+        meta = {"job_id": job_id, "event_id": n.event_id}
         self.trace.write_json("input.json", raw_request)
         self.trace.write_json("normalized_request.json", n.to_dict())
         self.trace.event("job_started", job_id=job_id, event_id=n.event_id, variants=n.variants_count)

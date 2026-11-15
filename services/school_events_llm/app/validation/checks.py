@@ -474,9 +474,13 @@ def validate_variant(v: dict[str, Any], n: NormalizedRequest, catalog: Catalog, 
     human_texts += [(f"materials.{m['material_id']}", [m["title"], m["content"], m["teacher_notes"]]) for m in materials]
     human_texts.append(("teacher_instructions", list(v.get("teacher_instructions") or [])))
     for loc, parts in human_texts:
-        found = sorted({token for part in parts for token in leftover_ids(part) + untranslated_things(part)})
-        if found:
-            add("TECH-ID-IN-TEXT", "warning", loc, f"В тексте для педагога технические обозначения: {', '.join(found[:5])}", "blocks", repairable=False)
+        ids = sorted({token for part in parts for token in leftover_ids(part)})
+        words = sorted({token for part in parts for token in untranslated_things(part)} - set(ids))
+        # Слова не по-русски в заметке - не ID: отдельное сообщение (QA 15.11, BUG-23 принял «tissues» за ложное срабатывание).
+        messages = ([f"В тексте для педагога технические обозначения: {', '.join(ids[:5])}"] if ids else []) + \
+                   ([f"В заметке «Также понадобится» остались слова не по-русски: {', '.join(words[:5])}"] if words else [])
+        if messages:
+            add("TECH-ID-IN-TEXT", "warning", loc, ". ".join(messages), "blocks", repairable=False)
 
     # Проверка связи ценностей с механиками по правилам VAL-001..VAL-004.
     vtm = v["concept"].get("values_to_mechanics", [])

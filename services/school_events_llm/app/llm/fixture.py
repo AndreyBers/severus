@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import copy
 import json
+from pathlib import Path
 from typing import Any
 
 from .client import LLMClient, LLMResult
@@ -26,6 +27,7 @@ class FixtureLLM(LLMClient):
         if not goldens:
             raise ValueError("Нужен хотя бы один эталон")
         self.goldens = goldens
+        self.events = [_golden_event(g) for g in goldens]
         self.broken = dict(broken or {})
         # Битые ответы выдаются первым вызовам этапа: при параллельных вариантах неизвестно, какому варианту.
         self.parallel_variants_safe = not self.broken
@@ -40,17 +42,25 @@ class FixtureLLM(LLMClient):
         """
         return {"model_key": self.model_key, "provider": "fixture", "goldens": len(self.goldens)}
 
-    def _golden(self, variant_id: str | None) -> dict[str, Any]:
-        """Выбирает эталонный пакет, соответствующий текущему варианту тестовой генерации.
+    def _ordered(self, event_id: str | None) -> list[dict[str, Any]]:
+        """Эталоны того же события первыми, остальные после (QA 15.11, BUG-04: запрос на День матери
+        получал вариант 1 из эталона Дня знаний). Эталонов по одному на событие, поэтому варианты 2-3 остаются
+        из других эталонов и по-прежнему различаются."""
+        same = [g for g, ev in zip(self.goldens, self.events) if event_id and ev == event_id]
+        return same + [g for g in self.goldens if all(g is not s for s in same)]
+
+    def _golden(self, variant_id: str | None, event_id: str | None = None) -> dict[str, Any]:
+        """Выбирает эталонный пакет для варианта: по номеру варианта среди эталонов, упорядоченных по событию.
 
         Параметры:
-            `variant_id`.
+            `variant_id`, `event_id` - событие запроса (из `meta`).
 
         Возвращает:
             dict[str, Any].
         """
+        goldens = self._ordered(event_id)
         idx = int(variant_id[1:]) - 1 if variant_id else 0
-        return self.goldens[idx % len(self.goldens)]
+        return goldens[idx % len(goldens)]
 
     def _respond(self, task: str, meta: dict[str, Any]) -> dict[str, Any]:
         """Формирует ответ конкретного этапа из эталонного пакета без обращения к реальной модели.
@@ -64,12 +74,13 @@ class FixtureLLM(LLMClient):
         if task == "variation_plan":
             n = int(meta.get("variants_count") or 0) or None
             concepts = []
-            for i, g in enumerate(self.goldens[: n or len(self.goldens)], 1):
+            ordered = self._ordered(meta.get("event_id"))
+            for i, g in enumerate(ordered[: n or len(ordered)], 1):
                 c = copy.deepcopy(g["concept"])
                 c["variant_id"] = f"v{i}"
                 concepts.append(c)
             return {"schema_version": "1.2", "task": "variation_plan", "concepts": concepts}
-        g = self._golden(meta.get("variant_id"))
+        g = self._golden(meta.get("variant_id"), meta.get("event_id"))
         v = g["variant_package"]["variant"]
         vid = meta.get("variant_id", "v1")
         if task == "scenario_plan":
@@ -122,3 +133,17 @@ class FixtureLLM(LLMClient):
             text = "<think>служебные рассуждения</think>\n```json\n" + json.dumps(self._respond(task_name, meta), ensure_ascii=False) + "\n```"
         return LLMResult(text=text, model_key=self.model_key, provider="fixture", provider_model_id="fixture",
                          usage=None, latency_ms=0, reasoning_stripped=True, structured_mode="none")
+
+
+def _golden_event(golden: dict[str, Any]) -> str | None:
+    """Событие эталона: `event_id` в самом эталоне или в его файле запроса (`request_file` от корня сервиса)."""
+    if golden.get("event_id"):
+        return str(golden["event_id"])
+    request_file = golden.get("request_file")
+    if not request_file:
+        return None
+    path = Path(__file__).resolve().parents[2] / str(request_file)
+    try:
+        return json.loads(path.read_text(encoding="utf-8")).get("event_id")
+    except (OSError, ValueError):
+        return None
