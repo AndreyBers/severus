@@ -42,11 +42,9 @@
   "regional_topics": [],
   "source_collection": "christmas",
   "source_ids": [
-    "src_christmas_audit_01",
-    "src_christmas_audit_02",
-    "src_christmas_audit_03",
-    "src_christmas_v19_01",
-    "src_christmas_v19_02"
+    "src_christmas_legal_01",
+    "src_christmas_culture_01",
+    "src_christmas_prlib_01"
   ],
   "review": {
     "historical_accuracy_required": true,
@@ -57,5 +55,5 @@
     "RU-SVE"
   ],
   "catalog_version": "2.6",
-  "updated_at": "2026-10-26"
+  "updated_at": "2026-11-14"
 }

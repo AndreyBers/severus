@@ -46,9 +46,7 @@
   "source_ids": [
     "src_unity_day_audit_01",
     "src_unity_day_audit_02",
-    "src_unity_day_audit_03",
-    "src_unity_day_v19_01",
-    "src_unity_day_v19_02"
+    "src_unity_day_prlib_01"
   ],
   "review": {
     "historical_accuracy_required": true,
@@ -59,5 +57,5 @@
     "RU-SVE"
   ],
   "catalog_version": "2.6",
-  "updated_at": "2026-10-26"
+  "updated_at": "2026-11-14"
 }
