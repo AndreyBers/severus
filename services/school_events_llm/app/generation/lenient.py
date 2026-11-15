@@ -13,10 +13,8 @@
    Только при единственном кандидате.
 2. Недостающее поле вложенного раздела берётся с уровня выше, если там оно лишнее (`values_to_mechanics`).
 3. Словарь на месте списка - список: один элемент или значения словаря (ключ - `activity_type`, если его нет).
-4. Значение не из списка допустимых: «teacher | pupils_group» (строка из образца) - первый допустимый вариант,
-   «pupils_all» - вариант с тем же первым словом («pupils_group»), если он один.
-5. Из плана: `role_ids` блока, `used_in_blocks` материала; `purpose` блока или материала - его название.
-6. Второй прогон 3 Pro 15.11 (19 вариантов из 25): `print_required` материала - по расходникам (печатать, если
+4. Из плана: `role_ids` блока, `used_in_blocks` материала; `purpose` блока или материала - его название.
+5. Второй прогон 3 Pro 15.11 (19 вариантов из 25): `print_required` материала - по расходникам (печатать, если
    в `dependencies` есть принтер); ID роли с опечаткой в блоке плана (`pups_all`) - объявленная роль (`pupils_all`).
 
 У профилей без флага (GigaChat-2-Max и другие) ничего из этого не вызывается: их работа не меняется.
@@ -33,9 +31,7 @@ from pydantic import BaseModel
 _LETTERS = re.compile(r"[^a-z]")
 # Ключ, похожий на поле другого раздела: «approx_minutes» у блока плана - это «proposed_minutes».
 _ALIASES = {"approx_minutes": "proposed_minutes", "minutes": "proposed_minutes", "description": "purpose"}
-# Перечисления, которые уже чинит общий `prepare_stage_output` (механики, типы занятий и материалов, режимы):
-# их здесь не трогаем, чтобы замена была та же, что и у остальных моделей.
-_ENUMS_FIXED_ELSEWHERE = {"engagement_mode", "primary_mechanic", "activity_type", "mechanic_type", "mode", "role_mode", "type"}
+
 
 
 def _distance(a: str, b: str, limit: int = 2) -> int:
@@ -105,16 +101,6 @@ def _fix_dict(data: dict, model: type[BaseModel], path: str, fixes: list[dict]) 
         if name in fields and name not in data and alias in data and alias not in fields:
             data[name] = data.pop(alias)
             fixes.append({"kind": "key_renamed", "path": path, "from": alias, "to": name})
-    # Значение не из списка допустимых: «teacher | pupils_group» (модель переписала строку из образца ответа) -
-    # первый допустимый вариант; «pupils_all» (ID роли) - вариант с тем же первым словом, если он один.
-    for name, info in fields.items():
-        options = () if name in _ENUMS_FIXED_ELSEWHERE else _literal_options(info.annotation)
-        value = data.get(name)
-        if options and isinstance(value, str) and value not in options:
-            fixed = _literal_value(value, options)
-            if fixed:
-                data[name] = fixed
-                fixes.append({"kind": "enum_fixed", "path": f"{path}.{name}".lstrip("."), "from": value, "to": fixed})
     # 2-3. Вложенные разделы: поле с уровня выше, словарь вместо списка, рекурсия.
     for name, info in fields.items():
         value = data.get(name)
@@ -135,26 +121,6 @@ def _fix_dict(data: dict, model: type[BaseModel], path: str, fixes: list[dict]) 
                         item[child] = data.pop(child)
                         fixes.append({"kind": "field_moved", "path": where.lstrip("."), "field": child})
             _fix_dict(item, nested, where.lstrip("."), fixes)
-
-
-def _literal_options(annotation: Any) -> tuple[str, ...]:
-    if typing.get_origin(annotation) is typing.Literal:
-        return tuple(str(a) for a in typing.get_args(annotation))
-    for arg in typing.get_args(annotation):
-        options = _literal_options(arg)
-        if options:
-            return options
-    return ()
-
-
-def _literal_value(value: str, options: tuple[str, ...]) -> str | None:
-    parts = [p.strip() for p in re.split(r"[|,/]", value) if p.strip()]
-    for part in parts:
-        if part in options:
-            return part
-    first = re.split(r"[^a-z]", value.lower())[0]
-    same = [o for o in options if re.split(r"[^a-z]", o)[0] == first] if first else []
-    return same[0] if len(same) == 1 else None
 
 
 def _as_list(value: dict, nested: type[BaseModel] | None) -> list:
@@ -180,7 +146,7 @@ def fix_output(stage: str, data: Any, model: type[BaseModel], *, plan: dict | No
     if not isinstance(data, dict):
         return fixes
     _fix_dict(data, model, "", fixes)
-    # 5. Поля, которые программа знает из плана.
+    # 4. Поля, которые программа знает из плана.
     if stage == "scenario_plan":
         declared = [r.get("role_id") for r in data.get("roles") or [] if isinstance(r, dict) and r.get("role_id")]
         for index, block in enumerate(data.get("blocks") or []):

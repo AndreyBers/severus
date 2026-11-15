@@ -12,6 +12,7 @@ from dataclasses import asdict, dataclass
 from typing import Any
 
 from ..catalog import Catalog
+from ..generation.dates import DATE as _DATE, YEAR as _YEAR, day_month as _day_month
 from ..generation.humanize import leftover_ids
 from ..generation.source_refs import document_confirmed, document_mentions
 from ..generation.timing import check_grid
@@ -19,7 +20,6 @@ from ..normalize import NormalizedRequest
 from ..script_length import script_min_chars, script_short_limit
 from .inner_timing import grouping_counts, inner_timing_problems
 
-_YEAR = re.compile(r"(?<!\d)(1[0-9]{3}|20[0-9]{2})(?!\d)")
 # Сведения о традициях конкретной страны или народа. Основы в нижнем регистре: текст перед поиском приводится
 # к нижнему регистру, поэтому «В Японии традиционно…» и «в Японии традиционно…» ловятся одинаково.
 # Ключ места: (основа страны после «в / во» и в «традиции …», названия жителей, народ после «у / для»).
@@ -204,16 +204,6 @@ _ONLINE_TASK = re.compile(
 
 # Век: «в XVII веке», «XIX века», «в 17 веке», «18-го века».
 _CENTURY = re.compile(r"\b(?:[IVX]{1,5}|\d{1,2}(?:-?(?:м|ом|го|ого))?)\s+век(?:а|е|ом|ах|ов|и)?\b")
-_DATE = re.compile(r"\b\d{1,2}\s+(января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря)\b", re.I)
-_MONTHS_GEN = ("января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря")
-
-
-def _day_month(token: str) -> tuple[int, int] | None:
-    """«31 декабря» -> (31, 12); не дата - None."""
-    m = re.fullmatch(r"(\d{1,2})\s+(\w+)", token.strip().lower())
-    return (int(m.group(1)), _MONTHS_GEN.index(m.group(2)) + 1) if m and m.group(2) in _MONTHS_GEN else None
-
-
 def event_days(rule: dict) -> set[tuple[int, int]]:
     """Дни самого события из карточки каталога как (день, месяц), в любой записи: «7 января» в пояснении,
     «31.12 – 08.01» в пояснении, «12-31» в фиксированной дате. Дата документа («от 08.09.2016») - не день события.

@@ -1,0 +1,22 @@
+"""Даты в тексте: год, «31 декабря», названия месяцев в родительном падеже.
+
+Одни и те же шаблоны нужны проверкам (`FACT-UNREGISTERED`, `GOAL-UNCOVERED`), разбору ссылок на источники
+и замене дат в бланках, поэтому они собраны здесь, а не повторяются в каждом модуле.
+"""
+
+from __future__ import annotations
+
+import re
+
+MONTHS_GEN = ("января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря")
+MONTHS = r"(?:" + "|".join(MONTHS_GEN) + r")"
+# Год 1000-2099: не часть длинного числа и не номер документа («№ 1022-УГ», «№1505»).
+YEAR = re.compile(r"(?<![\d№])(1[0-9]{3}|20[0-9]{2})(?!\d)")
+# День и месяц: «7 января», «31 декабря».
+DATE = re.compile(r"\b\d{1,2}\s+" + MONTHS + r"\b", re.I)
+
+
+def day_month(token: str) -> tuple[int, int] | None:
+    """«31 декабря» -> (31, 12); не дата - None."""
+    m = re.fullmatch(r"(\d{1,2})\s+(\w+)", token.strip().lower())
+    return (int(m.group(1)), MONTHS_GEN.index(m.group(2)) + 1) if m and m.group(2) in MONTHS_GEN else None

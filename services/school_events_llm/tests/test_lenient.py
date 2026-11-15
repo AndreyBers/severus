@@ -90,7 +90,7 @@ class TraceAnswersTest(unittest.TestCase):
             "variation_plan_no_title_key": {"value_keyed"},
             "scenario_block_bare_keys": set(),
             "materials_bare_value": set(),
-            "materials_typos_audience": {"key_renamed", "enum_fixed"},
+            "materials_typos_audience": {"key_renamed"},
             "scenario_plan_typo_minutes": {"field_moved"},
         }
         for name, kinds in expected.items():

@@ -119,6 +119,14 @@ class FieldNameAsWordTest(unittest.TestCase):
                 humanize_variant(variant)
                 self.assertEqual(variant["materials"][0]["teacher_notes"], f"Используйте {expected} из справки.")
 
+    def test_teacher_notes_in_instructions(self):
+        """Финальный прогон 15.11 (GigaChat-2-Max): поле материалов `teacher_notes` в подготовке педагога."""
+        variant = {"timeline": [], "roles": [], "materials": [],
+                   "teacher_instructions": ["Подготовьте все материалы заранее, следуя рекомендациям в teacher_notes каждого материала."]}
+        self.assertEqual(humanize_variant(variant), [{"field": "teacher_instructions[0]", "ids": ["teacher_notes"]}])
+        self.assertEqual(variant["teacher_instructions"][0],
+                         "Подготовьте все материалы заранее, следуя рекомендациям в заметки для педагога каждого материала.")
+
 
 if __name__ == "__main__":
     unittest.main()

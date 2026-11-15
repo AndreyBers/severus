@@ -121,12 +121,22 @@ def resource_ids(n: NormalizedRequest) -> set[str]:
 
 
 def _audience(value: Any) -> Any:
-    """Приводит адресата материала к допустимому значению: `parent_audience` -> `parent`, `pupils_all` -> `pupils_group`."""
+    """Приводит адресата материала к допустимому значению: `parent_audience` -> `parent`, `pupils_all` -> `pupils_group`.
+
+    `whole_class` (плакат для всего класса) и `all_pupils` - тоже `pupils_group`, `helper` (памятка родителям-помощникам) -
+    `parent`. Прогон 15.11 (GigaChat-2-Max, День защитника, вариант 1): `"audience": "whole_class"` у шаблона плаката
+    три раза подряд не проходил схему, и вариант не собрался.
+    """
     if not isinstance(value, str) or value in AUDIENCES:
         return value
     v = value.strip().lower()
-    for prefix, target in (("teacher", "teacher"), ("parent", "parent"), ("pupils", "pupils_group"), ("pupil", "pupil"),
-                           ("student", "pupils_group"), ("class", "pupils_group")):
+    if v in AUDIENCES:
+        return v
+    if v.startswith("all_"):
+        v = v[4:]
+    for prefix, target in (("teacher", "teacher"), ("parent", "parent"), ("helper", "parent"), ("pupils", "pupils_group"),
+                           ("pupil", "pupil"), ("student", "pupils_group"), ("class", "pupils_group"),
+                           ("whole", "pupils_group"), ("group", "pupils_group"), ("everyone", "all")):
         if v.startswith(prefix):
             return target
     return value
