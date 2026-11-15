@@ -6,6 +6,9 @@
 - Второй (25 из 25), День Свердловской области, вариант 1: «указом губернатора Свердловской области (№ 1022-УГ
   от 23 сентября 2008 года)» - номер указа с пробелом после «№» давал FACT-UNREGISTERED на «1022», а после
   этой правки - на «2008». Дата указа есть в названии источника каталога («от 23.09.2008 № 1022-УГ»), это не новый факт.
+- Третий (25 из 25): расходники вне словаря попадали в заметку педагогу по-английски («Также понадобится: colored
+  pensils», «sequins, ленты, cardboard figures», «audience ballot»), а в шаблоне стены памяти стояла подпись
+  «Класс 9-а, 2023 год».
 """
 
 import copy
@@ -16,6 +19,8 @@ from pydantic import ValidationError
 
 from app.contracts.llm import STAGE_MODELS
 from app.generation.dates import YEAR
+from app.generation.humanize import blank_template_dates
+from app.generation.ids import normalize_dependencies, untranslated_things
 from app.generation.pipeline import _audience, prepare_stage_output
 from app.llm.jsonx import extract_json
 from app.validation.checks import title_dates, validate_variant
@@ -60,6 +65,55 @@ class DocumentNumberTest(unittest.TestCase):
         self.assertNotIn("FACT-UNREGISTERED", block_issues(decree, "sverdlovsk_oblast_day"))
         # Год, которого нет ни в названиях источников, ни в фактах, по-прежнему даёт предупреждение.
         self.assertIn("FACT-UNREGISTERED", block_issues("Область наградили орденом в 1958 году.", "sverdlovsk_oblast_day"))
+
+
+class ThingsTest(unittest.TestCase):
+    def normalize(self, deps: list[str], other_ids: tuple[str, ...] = ()) -> tuple[dict, list[dict]]:
+        data = {"materials": [{"material_id": "kit", "dependencies": deps, "teacher_notes": "Разложите заранее."}]
+                + [{"material_id": mid, "dependencies": []} for mid in other_ids]}
+        changes: list[dict] = []
+        normalize_dependencies(data, set(catalog().dependencies), changes)
+        return data["materials"][0], changes
+
+    def test_dictionary_matches(self):
+        """Опечатка, синоним и «X_or_Y» - ID словаря, а не заметка."""
+        cases = {"colored_pensils": ["colored_pencils"], "audio_player": ["audio"], "sticky_notes_or_tape": ["sticky_notes", "tape"]}
+        for raw, expected in cases.items():
+            with self.subTest(raw=raw):
+                material, _ = self.normalize([raw])
+                self.assertEqual(material["dependencies"], expected)
+                self.assertEqual(material["teacher_notes"], "Разложите заранее.")
+
+    def test_notes_in_russian(self):
+        material, _ = self.normalize(["sequins", "ribbons", "cardboard_figures", "large_cardboard_box", "puzzle", "ball", "boxes"])
+        self.assertEqual(material["teacher_notes"],
+                         "Разложите заранее. Также понадобится: пайетки, ленты, картонные фигурки, большие картонные коробки, пазлы, мяч, коробки.")
+        self.assertEqual(untranslated_things(material["teacher_notes"]), [])
+
+    def test_material_is_not_dependency(self):
+        material, changes = self.normalize(["audience_ballot", "markers"], other_ids=("audience_ballot",))
+        self.assertEqual(material["dependencies"], ["markers"])
+        self.assertEqual(material["teacher_notes"], "Разложите заранее.")
+        self.assertIn({"kind": "dependency_is_material", "material_id": "kit", "value": "audience_ballot"}, changes)
+
+    def test_untranslated_is_warned(self):
+        material, _ = self.normalize(["glitter_pens"])
+        self.assertEqual(untranslated_things(material["teacher_notes"]), ["glitter pens"])
+        n, v = setup("ex1_knowledge_day")
+        v["materials"][0]["teacher_notes"] = material["teacher_notes"]
+        found = [i for i in validate_variant(v, n, catalog(), settings().generation())
+                 if i.code == "TECH-ID-IN-TEXT" and i.location == f"materials.{v['materials'][0]['material_id']}"]
+        self.assertEqual(len(found), 1)
+        self.assertIn("glitter pens", found[0].message)
+
+    def test_caption_year_blanked(self):
+        content = 'Верхний заголовок: "Наша Стена Памяти", внизу подпись: "Класс 9-а, 2023 год". Между ячейками поля.'
+        variant = {"materials": [{"material_id": "wall_template", "content": content},
+                                 {"material_id": "poster", "content": 'Надпись: "Победа, 1945 год".'}]}
+        self.assertEqual(blank_template_dates(variant), [{"field": "materials.wall_template.content", "dates": ["2023 год"]}])
+        self.assertEqual(variant["materials"][0]["content"],
+                         'Верхний заголовок: "Наша Стена Памяти", внизу подпись: "Класс 9-а, 20__ год". Между ячейками поля.')
+        self.assertEqual(variant["materials"][1]["content"], 'Надпись: "Победа, 1945 год".')
 
 
 def block_issues(text: str, event_id: str) -> set[str]:

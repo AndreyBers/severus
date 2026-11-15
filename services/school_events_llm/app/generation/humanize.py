@@ -15,7 +15,7 @@ import re
 from typing import Any
 
 from .dates import MONTHS as _MONTHS
-from .ids import _THING_RU, KEY_RU, _singular
+from .ids import _THING_RU, KEY_RU, _singular, one_edit as _one_edit
 
 # Названия типов материалов для текста, если материала с таким ID в варианте нет.
 MATERIAL_TYPE_TITLES = {
@@ -167,17 +167,6 @@ def _stem(text: str) -> str:
 def _words(key: str) -> tuple[str, ...]:
     """Слова ID без числа и порядка: «commitments_book_pages», «page_book_commitment» - одно и то же."""
     return tuple(sorted(_singular(part) for part in key.split("_") if part))
-
-
-def _one_edit(a: str, b: str) -> bool:
-    """Слова отличаются одной буквой (замена, лишняя, пропущенная) или перестановкой соседних букв."""
-    if a == b or abs(len(a) - len(b)) > 1:
-        return False
-    if len(a) == len(b):
-        diff = [i for i in range(len(a)) if a[i] != b[i]]
-        return len(diff) == 1 or (len(diff) == 2 and diff[1] == diff[0] + 1 and a[diff[0]] == b[diff[1]] and a[diff[1]] == b[diff[0]])
-    short, long_ = (a, b) if len(a) < len(b) else (b, a)
-    return any(long_[:i] + long_[i + 1:] == short for i in range(len(long_)))
 
 
 # Слова, которые меняют смысл материала: «quiz_answer_cards» - ключ ответов, а не карточки викторины.
@@ -470,10 +459,20 @@ _DATE_LINE = re.compile(
     re.I | re.M,
 )
 DATE_BLANK = "«___» __________ 20__ г."
+# Год в подписи шаблона в кавычках: «внизу подпись: "Класс 9-а, 2023 год"» (шаблон стены памяти, второй финальный
+# прогон 15.11). Модель ставит прошлый год; это место для года, а не факт. Только подпись класса, школы или выпуска:
+# «надпись: "Победа, 1945 год"» на плакате - исторический факт, его не трогаем.
+_CAPTION_YEAR = re.compile(
+    r"(?P<pre>(?:подпис|надпис)\w*[^\"«\n]{0,30}?[\"«](?=[^\"»\n]*(?:класс|школ|выпуск))[^\"»\n]{0,80}?)"
+    r"(?P<year>(?:19|20)\d{2})(?P<post>[ \t]*(?:год|г\.)[ \t]*[\"»])",
+    re.I,
+)
+YEAR_BLANK = "20__"
 
 
 def blank_template_dates(variant: dict[str, Any]) -> list[dict[str, Any]]:
-    """Заменяет дату-строку в материалах (подпись письма, бланк) на пустое место для даты.
+    """Заменяет дату-строку в материалах (подпись письма, бланк) на пустое место для даты, год в подписи
+    шаблона («Класс 9-а, 2023 год») - на «20__».
 
     Возвращает:
         Список изменений для трассы: материал и заменённые строки.
@@ -484,7 +483,9 @@ def blank_template_dates(variant: dict[str, Any]) -> list[dict[str, Any]]:
         if not isinstance(content, str):
             continue
         found = [m.group(0).strip() for m in _DATE_LINE.finditer(content)]
+        found += [m.group("year") + m.group("post").rstrip("\"»").rstrip() for m in _CAPTION_YEAR.finditer(content)]
         if found:
-            material["content"] = _DATE_LINE.sub(lambda m: m.group("label") + DATE_BLANK + m.group("close"), content)
+            content = _DATE_LINE.sub(lambda m: m.group("label") + DATE_BLANK + m.group("close"), content)
+            material["content"] = _CAPTION_YEAR.sub(lambda m: m.group("pre") + YEAR_BLANK + m.group("post"), content)
             changes.append({"field": f"materials.{material.get('material_id')}.content", "dates": found})
     return changes

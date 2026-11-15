@@ -39,6 +39,7 @@ DEPENDENCY_SYNONYMS: dict[str, str] = {
     "urn": "ballot_box", "ballot_urn": "ballot_box", "box": "ballot_box", "voting_box": "ballot_box",
     "stopwatch": "timer", "clock": "timer", "hourglass": "timer", "sekundomer": "timer",
     "speakers": "audio", "speaker": "audio", "music": "audio", "sound": "audio", "audio_system": "audio",
+    "audio_player": "audio", "music_player": "audio", "sound_system": "audio", "portable_speaker": "audio",
     "screen": "projector", "presentation": "projector", "slides": "projector", "multimedia": "projector",
     "wifi": "internet", "wi_fi": "internet", "online": "internet",
     "print": "printer", "printing": "printer",
@@ -169,7 +170,27 @@ _THING_RU = {
     "stapler": "степлер", "paper_clip": "скрепки", "pushpin": "кнопки", "pin": "булавки", "ruler": "линейки",
     "eraser": "ластики", "sharpener": "точилки", "folder": "папки", "notebook": "тетради", "clipboard": "планшеты для записей",
     "decoration": "украшения", "garland": "гирлянда", "costume": "костюмы", "hat": "шапки", "mask": "маски",
+    "box": "коробки", "boxes": "коробки", "glue_gun": "клеевой пистолет", "tape_measure": "рулетка", "figure": "фигурки", "figurine": "фигурки", "sequin": "пайетки", "glitter": "блёстки",
+    "puzzle": "пазлы", "feather": "перья", "flag": "флажки", "toy": "игрушки", "frame": "рамки", "pompom": "помпоны",
+    "stone": "камни", "shell": "ракушки", "cone": "шишки", "leaf": "листья", "leaves": "листья", "stamp": "штампы",
+    "tube": "тубусы", "jar": "банки", "bottle": "бутылки", "lid": "крышки", "straw": "трубочки", "stick": "палочки",
 }
+# Прилагательные перед названием расходника - во множественном числе, оно не зависит от рода:
+# «large_cardboard_box» - «большие картонные коробки» (второй финальный прогон 15.11). Составное название
+# собирается, только если последнее слово есть в `_THING_RU` и его название во множественном числе.
+_THING_ADJ_RU = {
+    "large": "большие", "big": "большие", "small": "маленькие", "little": "маленькие", "cardboard": "картонные",
+    "paper": "бумажные", "colored": "цветные", "coloured": "цветные", "color": "цветные", "colour": "цветные",
+    "wooden": "деревянные", "wood": "деревянные", "plastic": "пластиковые", "glass": "стеклянные", "metal": "металлические",
+    "white": "белые", "red": "красные", "green": "зелёные", "blue": "синие", "yellow": "жёлтые", "gold": "золотые",
+    "golden": "золотые", "silver": "серебряные", "empty": "пустые", "round": "круглые", "soft": "мягкие",
+    "decorative": "декоративные", "fabric": "тканевые", "transparent": "прозрачные", "shiny": "блестящие",
+}
+# Названия в `_THING_RU` в единственном числе: к ним прилагательное во множественном числе не подходит.
+_THING_RU_SINGULAR = {"картон", "цветной картон", "пластилин", "глина", "акварель", "гуашь", "верёвка", "ткань", "вода",
+                      "мяч", "корзина", "карта", "глобус", "колонка", "ноутбук", "микрофон", "фотоаппарат", "степлер",
+                      "гирлянда", "клеевой пистолет", "рулетка"}
+NOTE_PREFIX = "Также понадобится: "
 
 
 def _singular(key: str) -> str:
@@ -180,47 +201,113 @@ def _singular(key: str) -> str:
     return key
 
 
-def _readable(raw: str) -> str:
-    """Название расходника для педагога: по-русски из `_THING_RU`, иначе без подчёркиваний и не как ID."""
-    key = slug_id(raw, "dep")
+def _thing_ru(key: str) -> str | None:
     for candidate in (key, _singular(key)):
         if candidate in _THING_RU:
             return _THING_RU[candidate]
+    return None
+
+
+def _readable(raw: str) -> str:
+    """Название расходника для педагога: по-русски из `_THING_RU`, составное - с прилагательными
+    («cardboard_figures» - «картонные фигурки»), иначе без подчёркиваний и не как ID."""
+    key = slug_id(raw, "dep")
+    name = _thing_ru(key)
+    if name:
+        return name
+    words = key.split("_")
+    noun = _thing_ru(words[-1]) if len(words) > 1 else None
+    if noun and noun not in _THING_RU_SINGULAR and all(w in _THING_ADJ_RU for w in words[:-1]):
+        return " ".join([_THING_ADJ_RU[w] for w in words[:-1]] + [noun])
     return raw.strip() if not re.fullmatch(r"[a-z0-9_]+", raw.strip()) else raw.strip().replace("_", " ")
+
+
+def untranslated_things(text: str) -> list[str]:
+    """Латинские слова в заметке «Также понадобится: …»: расходник, который не удалось назвать по-русски."""
+    found: list[str] = []
+    for m in re.finditer(re.escape(NOTE_PREFIX) + r"([^.\n]*)", text or ""):
+        found += re.findall(r"[A-Za-z][A-Za-z ]*[A-Za-z]|[A-Za-z]", m.group(1))
+    return [w.strip() for w in found if w.strip()]
+
+
+def one_edit(a: str, b: str) -> bool:
+    """Слова отличаются одной буквой (замена, лишняя, пропущенная) или перестановкой соседних букв."""
+    if a == b or abs(len(a) - len(b)) > 1:
+        return False
+    if len(a) == len(b):
+        diff = [i for i in range(len(a)) if a[i] != b[i]]
+        return len(diff) == 1 or (len(diff) == 2 and diff[1] == diff[0] + 1 and a[diff[0]] == b[diff[1]] and a[diff[1]] == b[diff[0]])
+    short, long_ = (a, b) if len(a) < len(b) else (b, a)
+    return any(long_[:i] + long_[i + 1:] == short for i in range(len(long_)))
+
+
+def _dependency_key(key: str, dependency_ids: set[str]) -> str | None:
+    """ID словаря зависимостей для одного расходника: точно, во множественном числе, синоним или с опечаткой
+    в одной букве слова от 5 букв («colored_pensils» - «colored_pencils», второй финальный прогон 15.11)."""
+    for candidate in (key, _singular(key)):
+        if candidate in dependency_ids:
+            return candidate
+        if candidate in DEPENDENCY_SYNONYMS:
+            return DEPENDENCY_SYNONYMS[candidate]
+    words = key.split("_")
+    targets = set()
+    for known in set(dependency_ids) | set(DEPENDENCY_SYNONYMS):
+        parts = known.split("_")
+        diff = [(a, b) for a, b in zip(words, parts) if a != b]
+        if len(parts) == len(words) and len(diff) == 1 and min(len(diff[0][0]), len(diff[0][1])) >= 5 and one_edit(*diff[0]):
+            targets.add(known if known in dependency_ids else DEPENDENCY_SYNONYMS[known])
+    return targets.pop() if len(targets) == 1 else None
+
+
+def _match_dependency(raw: str, dependency_ids: set[str]) -> tuple[list[str], list[str]]:
+    """ID словаря для расходника и то, что сопоставить не удалось. «sticky_notes_or_tape» - оба ID."""
+    key = slug_id(raw, "dep")
+    found = _dependency_key(key, dependency_ids)
+    if found:
+        return [found], []
+    parts = re.split(r"_(?:or|and)_", key)
+    if len(parts) > 1:
+        ids = [k for k in (_dependency_key(part, dependency_ids) for part in parts) if k]
+        rest = [part for part in parts if not _dependency_key(part, dependency_ids)]
+        if ids:
+            return ids, rest
+    return [], [raw.strip()]
 
 
 def normalize_dependencies(data: dict, dependency_ids: set[str], changes: list[dict[str, Any]]) -> None:
     """Оставляет в `materials[].dependencies` только ID из словаря зависимостей.
 
-    Синонимы (`flipchart`, `scotch`, `stopwatch`…) заменяются на ID словаря. То, что сопоставить нельзя,
-    убирается из `dependencies` и дописывается в `teacher_notes` («Также понадобится: …»), чтобы педагог
-    не потерял эту информацию, а проверка не падала с `DEP-UNKNOWN`.
+    Синонимы (`flipchart`, `scotch`, `stopwatch`…), опечатки и «X_or_Y» заменяются на ID словаря. ID другого
+    материала варианта (`audience_ballot` у инструкции к награждению) - не расходник: убирается без заметки.
+    То, что сопоставить нельзя, убирается из `dependencies` и дописывается в `teacher_notes` по-русски
+    («Также понадобится: …»), чтобы педагог не потерял эту информацию, а проверка не падала с `DEP-UNKNOWN`.
     """
-    for j, m in enumerate(data.get("materials") or []):
-        if not isinstance(m, dict) or not isinstance(m.get("dependencies"), list):
+    materials = [m for m in data.get("materials") or [] if isinstance(m, dict)]
+    material_ids = {slug_id(m.get("material_id"), "mat") for m in materials if isinstance(m.get("material_id"), str)}
+    for m in materials:
+        if not isinstance(m.get("dependencies"), list):
             continue
         kept: list[str] = []
         unknown: list[str] = []
         for raw in m["dependencies"]:
             if not isinstance(raw, str) or not raw.strip():
                 continue
-            key = slug_id(raw, "dep")
-            for candidate in (key, _singular(key)):
-                if candidate in dependency_ids or candidate in DEPENDENCY_SYNONYMS:
-                    key = candidate if candidate in dependency_ids else DEPENDENCY_SYNONYMS[candidate]
-                    break
-            if key in dependency_ids:
+            ids, rest = _match_dependency(raw, dependency_ids)
+            for key in ids:
                 if key != raw:
                     changes.append({"kind": "dependency_fixed", "material_id": m.get("material_id"), "from": raw, "to": key})
                 if key not in kept:
                     kept.append(key)
-            else:
-                unknown.append(raw.strip())
+            for item in rest:
+                if slug_id(item, "dep") in material_ids:
+                    changes.append({"kind": "dependency_is_material", "material_id": m.get("material_id"), "value": item})
+                else:
+                    unknown.append(item)
         m["dependencies"] = kept
         if unknown:
             changes.append({"kind": "dependency_moved_to_notes", "material_id": m.get("material_id"), "values": unknown})
             names = list(dict.fromkeys(_readable(x) for x in unknown))
-            note = "Также понадобится: " + ", ".join(names) + "."
+            note = NOTE_PREFIX + ", ".join(names) + "."
             notes = m.get("teacher_notes")
             m["teacher_notes"] = f"{notes.rstrip()} {note}" if isinstance(notes, str) and notes.strip() else note
 

@@ -14,6 +14,7 @@ from typing import Any
 from ..catalog import Catalog
 from ..generation.dates import DATE as _DATE, YEAR as _YEAR, day_month as _day_month
 from ..generation.humanize import leftover_ids
+from ..generation.ids import untranslated_things
 from ..generation.source_refs import document_confirmed, document_mentions
 from ..generation.timing import check_grid
 from ..normalize import NormalizedRequest
@@ -467,12 +468,13 @@ def validate_variant(v: dict[str, Any], n: NormalizedRequest, catalog: Catalog, 
                                              next_text=" ".join([following.get("teacher_script", ""), *(following.get("pupil_actions") or [])])):
             add("INNER-TIMING", "warning", f"timeline.{b['block_id']}", f"Время внутри этапа не сходится: {problem}", "blocks", repairable=False)
 
-    # Технические обозначения в тексте для педагога (после замены известных ID на названия).
+    # Технические обозначения в тексте для педагога (после замены известных ID на названия) и расходники,
+    # которые программа не смогла назвать по-русски в заметке «Также понадобится: …».
     human_texts = [(f"timeline.{b['block_id']}", [b["title"], b["purpose"], b["teacher_script"], *b["pupil_actions"]]) for b in timeline]
     human_texts += [(f"materials.{m['material_id']}", [m["title"], m["content"], m["teacher_notes"]]) for m in materials]
     human_texts.append(("teacher_instructions", list(v.get("teacher_instructions") or [])))
     for loc, parts in human_texts:
-        found = sorted({token for part in parts for token in leftover_ids(part)})
+        found = sorted({token for part in parts for token in leftover_ids(part) + untranslated_things(part)})
         if found:
             add("TECH-ID-IN-TEXT", "warning", loc, f"В тексте для педагога технические обозначения: {', '.join(found[:5])}", "blocks", repairable=False)
 
