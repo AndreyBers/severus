@@ -562,6 +562,8 @@ class Composer:
             "fallback_example": "null",
             "variant_id": "v1",
             "planned_materials_list": "как в плане выше",
+            "materials_hint": "",
+            "instruction_example": "Что подготовить заранее",
         }
         if n.parents_enabled:
             first_role = n.parent_roles[0]

@@ -3,7 +3,8 @@
 В карточке для учеников модель вставила служебные ссылки «(fact_claims: src_…/frag_…)» прямо в текст,
 а `fact_claims` материалов оставила пустым: в тексте был технический мусор (`TECH-ID-IN-TEXT`), проверенный
 факт о 1934 годе считался незарегистрированным (`FACT-UNREGISTERED`), а источник не попал в список.
-В той же карточке и в прошлом прогоне - «указ губернатора», которого нет в проверенных фрагментах.
+В той же карточке - «указ губернатора». Сначала он считался выдуманным, но фрагмент о 17 января взят из
+«Указа Губернатора Свердловской области № 1022-УГ»: документ подтверждает название источника (прогон 15.11).
 """
 
 import copy
@@ -41,7 +42,8 @@ def bare_variant(content, script=""):
 
 class MoveSourceRefsTest(unittest.TestCase):
     def test_q08_card(self):
-        """Ссылки убраны из текста; факт о 1934 годе записан с верным фрагментом, фраза с выдуманным указом - нет."""
+        """Ссылки убраны из текста; факт о 1934 годе записан с верным фрагментом. Фраза с указом не записывается:
+        в цитате фрагмента указа нет, он только в названии источника."""
         variant = bare_variant(Q08_CARD)
         changes = move_source_refs(variant, fragments())
         content = variant["materials"][0]["content"]
@@ -74,6 +76,33 @@ class MoveSourceRefsTest(unittest.TestCase):
                 self.assertNotIn("src_", variant["materials"][0]["content"])
                 self.assertEqual(variant["fact_claims"], [])
 
+    def test_fragment_ids_in_block_script(self):
+        """Второй баг-лист 14.11 (BUG-16, job_20261114_173643_41aa2f): `frag_new_year_001`, `frag_new_year_005`
+        в реплике педагога - несколько ID в скобках, подпись «fragment_id:», ссылка без скобок."""
+        cases = {
+            "Пётр I перенёс Новый год на 1 января 1700 года (frag_new_year_001, frag_new_year_005). Давайте обсудим.":
+                "Пётр I перенёс Новый год на 1 января 1700 года. Давайте обсудим.",
+            "Пётр I перенёс Новый год на 1 января 1700 года (fragment_id: frag_new_year_001).":
+                "Пётр I перенёс Новый год на 1 января 1700 года.",
+            "Ребята! Согласно frag_new_year_001, Пётр I постановил начать год с 1 января 1700 года.":
+                "Ребята! Пётр I постановил начать год с 1 января 1700 года.",
+            "Пётр I постановил начать год с 1 января 1700 года [источники: frag_new_year_001; frag_new_year_005].":
+                "Пётр I постановил начать год с 1 января 1700 года.",
+        }
+        for text, expected in cases.items():
+            with self.subTest(text=text):
+                variant = bare_variant("", text)
+                move_source_refs(variant, fragments("new_year"))
+                self.assertEqual(variant["timeline"][0]["teacher_script"], expected)
+                self.assertEqual([c["fragment_id"] for c in variant["fact_claims"]], ["frag_new_year_001"])
+
+    def test_parentheses_with_meaning_kept(self):
+        """Скобки, где есть смысл кроме ссылки, остаются без ID; фраза без года и даты фактом не записывается."""
+        variant = bare_variant("", "Раздайте карточки (по одной на команду, см. frag_new_year_002). Начинаем. Это дата (в 1700 году).")
+        move_source_refs(variant, fragments("new_year"))
+        self.assertEqual(variant["timeline"][0]["teacher_script"], "Раздайте карточки (по одной на команду). Начинаем. Это дата (в 1700 году).")
+        self.assertEqual(variant["fact_claims"], [])
+
     def test_text_without_refs_untouched(self):
         variant = bare_variant("Карточка: герб области.\n\nОбсудите в группе.")
         before = copy.deepcopy(variant)
@@ -81,7 +110,8 @@ class MoveSourceRefsTest(unittest.TestCase):
         self.assertEqual(variant, before)
 
     def test_validation_after_move(self):
-        """После переноса нет TECH-ID-IN-TEXT и FACT-UNREGISTERED, а выдуманный указ даёт DOC-UNSOURCED."""
+        """После переноса нет TECH-ID-IN-TEXT и FACT-UNREGISTERED. DOC-UNSOURCED тоже нет: указ губернатора -
+        источник проверенного фрагмента о 17 января (прогон 15.11)."""
         n, v = setup("ex1_knowledge_day")
         n = copy.copy(n)
         n.event_id = "sverdlovsk_oblast_day"
@@ -92,7 +122,7 @@ class MoveSourceRefsTest(unittest.TestCase):
         loc = f"materials.{material['material_id']}"
         self.assertNotIn(("TECH-ID-IN-TEXT", loc), issues)
         self.assertNotIn(("FACT-UNREGISTERED", loc), issues)
-        self.assertIn(("DOC-UNSOURCED", loc), issues)
+        self.assertNotIn(("DOC-UNSOURCED", loc), issues)
 
 
 class DocumentMentionsTest(unittest.TestCase):
@@ -112,19 +142,36 @@ class DocumentMentionsTest(unittest.TestCase):
                 self.assertFalse(document_mentions(text))
 
     def test_document_in_fragment_not_flagged(self):
-        """Если документ есть в проверенном фрагменте события, предупреждения нет."""
+        """Документ подтверждают цитата проверенного фрагмента или название его источника. Издатель и номер из фразы
+        тоже должны там быть: «указ губернатора» и «№ 1022-УГ» есть в названии источника, «указ Президента»
+        и «№ 555-УГ» - нет."""
         n, v = setup("ex1_knowledge_day")
         n = copy.copy(n)
         n.event_id = "sverdlovsk_oblast_day"
-        v["materials"][0]["content"] = "День области установлен указом губернатора Свердловской области."
         loc = f"materials.{v['materials'][0]['material_id']}"
-        codes = lambda cat: {(i.code, i.location) for i in validate_variant(v, n, cat, settings().generation())}  # noqa: E731
-        self.assertIn(("DOC-UNSOURCED", loc), codes(catalog()))
+
+        def codes(text, cat=None):
+            v["materials"][0]["content"] = text
+            return {(i.code, i.location) for i in validate_variant(v, n, cat or catalog(), settings().generation())}
+
+        self.assertNotIn(("DOC-UNSOURCED", loc), codes("День области установлен указом губернатора Свердловской области."))
+        self.assertNotIn(("DOC-UNSOURCED", loc), codes("Праздник назван в указе губернатора № 1022-УГ."))
+        self.assertIn(("DOC-UNSOURCED", loc), codes("Праздник назван в указе губернатора № 555-УГ."))
+        self.assertIn(("DOC-UNSOURCED", loc), codes("День области установлен указом Президента."))
         frag = {"fragment_id": "frag_test_decree", "source_id": "src_test", "verification_status": "verified",
                 "events": ["sverdlovsk_oblast_day"], "regions": ["RU-SVE"],
-                "quote": "День образования Свердловской области установлен указом губернатора Свердловской области."}
+                "quote": "Указом Президента установлен День Свердловской области."}
         with_decree = dataclasses.replace(catalog(), fragments={**catalog().fragments, frag["fragment_id"]: frag})
-        self.assertNotIn(("DOC-UNSOURCED", loc), codes(with_decree))
+        self.assertNotIn(("DOC-UNSOURCED", loc), codes("День области установлен указом Президента.", with_decree))
+
+    def test_run_1115_decree_from_source_title(self):
+        """Прогон 15.11 (День Свердловской области, 9 класс): фраза верна, ложного предупреждения нет."""
+        n, v = setup("ex1_knowledge_day")
+        n = copy.copy(n)
+        n.event_id = "sverdlovsk_oblast_day"
+        v["timeline"][1]["teacher_script"] = "Согласно указу губернатора, этот праздник отмечается ежегодно 17 января."
+        codes = {(i.code, i.location) for i in validate_variant(v, n, catalog(), settings().generation())}
+        self.assertNotIn("DOC-UNSOURCED", {code for code, _ in codes})
 
 
 class SourceRefsReplayTest(unittest.TestCase):
@@ -152,7 +199,7 @@ class SourceRefsReplayTest(unittest.TestCase):
         self.assertIn("src_sverdlovsk_oblast_day_regional_02", {s["source_id"] for s in variant["sources"]})
         codes = {(i["code"], i["location"]) for i in variant["quality_report"]["issues"]}
         self.assertNotIn(("TECH-ID-IN-TEXT", f"materials.{card['material_id']}"), codes)
-        self.assertIn(("DOC-UNSOURCED", f"materials.{card['material_id']}"), codes)
+        self.assertNotIn(("DOC-UNSOURCED", f"materials.{card['material_id']}"), codes)
 
 
 if __name__ == "__main__":

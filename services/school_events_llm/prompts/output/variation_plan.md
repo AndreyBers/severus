@@ -1,4 +1,4 @@
-<!-- id: output.variation_plan | version: 1.0.0 -->
+<!-- id: output.variation_plan | version: 1.2.0 -->
 ## Формат ответа
 
 Верни один JSON-объект. В `concepts` ровно {{variants_count}} элемент(а), `variant_id` - {{variant_ids}}.

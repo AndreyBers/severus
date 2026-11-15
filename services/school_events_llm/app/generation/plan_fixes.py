@@ -16,6 +16,7 @@ GigaChat на просьбу исправить ответ часто возвр
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 # Типы материалов, которые можно узнать по `material_id`: модель называет материал по типу,
@@ -52,6 +53,25 @@ def fix_type_by_id(items: Any, where: str, key: str, changes: list[dict[str, Any
                 break
 
 
+# Лист голосования с типом «викторина» (прогон qa_check_1114c, выпускной: «Выберите НОМЕР идеи… [ ] Идея №1»):
+# у голосования нет ключа ответов, и `QUIZ-KEY` срабатывал зря.
+_VOTE = re.compile(r"голосован|бюллетен|проголосу|выберите\s+(?:\w+\s+){0,2}?(?:номер|лучш|понравивш)|отметьте\s+(?:\w+\s+){0,2}?(?:номер|лучш|понравивш)", re.I)
+_QUIZ_LIKE = re.compile(r"правильн\w*\s+ответ|верн\w*\s+ответ|ключ\w*\s+(?:к\s+)?ответ|ответ\w*\s*:", re.I)
+
+
+def fix_vote_quiz(items: Any, where: str, changes: list[dict[str, Any]]) -> None:
+    """Материал-голосование с типом `quiz` - `handout` (раздаточный материал), если в нём нет вопросов с ответами."""
+    if not isinstance(items, list):
+        return
+    for index, item in enumerate(items):
+        if not isinstance(item, dict) or item.get("type") != "quiz":
+            continue
+        text = " ".join(str(item.get(k) or "") for k in ("material_id", "title", "purpose", "content"))
+        if _VOTE.search(text.replace("_", " ")) and not _QUIZ_LIKE.search(text):
+            changes.append({"kind": "vote_not_quiz", "field": f"{where}.{index}.type", "from": "quiz", "to": "handout"})
+            item["type"] = "handout"
+
+
 def fix_parent_role_counts(roles: Any, changes: list[dict[str, Any]]) -> None:
     """Число в роли родителей меньше 1 (модель пишет 0 «остальным») - 1, иначе схема отклоняет план целиком."""
     if not isinstance(roles, list):
@@ -62,6 +82,45 @@ def fix_parent_role_counts(roles: Any, changes: list[dict[str, Any]]) -> None:
             if not isinstance(count, int) or count < 1:
                 changes.append({"kind": "parent_count_min", "field": f"roles.{index}.count", "from": count, "to": 1})
                 role["count"] = 1
+
+
+# Роль родителей по её ID: «parent_helpers» - помощники, «parent_audience» - зрители.
+_PARENT_MODE_WORDS = (
+    ("helper", re.compile(r"help|assist|volunteer|помощ", re.I)),
+    ("audience", re.compile(r"audience|viewer|spectator|guest|watch|зрител", re.I)),
+    ("evaluator", re.compile(r"jury|judge|evaluat|expert|жюри|эксперт", re.I)),
+    ("active_participant", re.compile(r"participant|active|player|team|участ", re.I)),
+)
+_PARENT_ROLE_TITLES = {"helper": "Родители-помощники", "audience": "Родители-зрители", "evaluator": "Родители-жюри",
+                       "active_participant": "Родители-участники"}
+
+
+def declare_parent_roles(data: Any, parents_enabled: bool, parent_roles: list[str], parents_count: int,
+                         changes: list[dict[str, Any]]) -> None:
+    """Роль родителей, на которую ссылается блок плана, но которой нет в `roles`, - в `roles` (меняет план на месте).
+
+    Модель ставит в блок `parent_helpers`, а в `roles` объявляет только зрителей: план падал с `PLAN-REF-ROLE`
+    и вызывался повторно (4 раза на 99 вариантов в финальных прогонах 15.11, правка промпта не помогла).
+    Роль добавляется, только если родители включены, ID говорит о родителях и режим роли разрешён запросом;
+    число - все пришедшие родители, лишнее в одном этапе потом убирает `fix_plan_for_request`.
+    """
+    if not parents_enabled or not isinstance(data, dict):
+        return
+    roles, blocks = data.get("roles"), data.get("blocks")
+    if not isinstance(roles, list) or not isinstance(blocks, list):
+        return
+    declared = {r.get("role_id") for r in roles if isinstance(r, dict)}
+    for block in blocks:
+        for role_id in (block.get("role_ids") or []) if isinstance(block, dict) else []:
+            if not isinstance(role_id, str) or role_id in declared or not re.search(r"parent|родител", role_id, re.I):
+                continue
+            mode = next((m for m, words in _PARENT_MODE_WORDS if words.search(role_id)), None)
+            if mode is None or mode not in parent_roles:
+                continue
+            roles.append({"role_id": role_id, "participant_type": "parent", "role_mode": mode,
+                          "title": _PARENT_ROLE_TITLES[mode], "count": max(parents_count, 1)})
+            declared.add(role_id)
+            changes.append({"kind": "parent_role_declared", "role_id": role_id, "role_mode": mode, "count": max(parents_count, 1)})
 
 
 def _unique_id(base: str, taken: set[str]) -> str:

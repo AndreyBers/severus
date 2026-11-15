@@ -1,4 +1,4 @@
-<!-- id: output.scenario_plan | version: 1.1.0 -->
+<!-- id: output.scenario_plan | version: 1.3.0 -->
 ## Формат ответа
 
 Верни один JSON-объект плана для варианта `{{variant_id}}`. Сумма `proposed_minutes` = {{duration_minutes}}.

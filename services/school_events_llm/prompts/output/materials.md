@@ -1,4 +1,4 @@
-<!-- id: output.materials | version: 1.2.0 -->
+<!-- id: output.materials | version: 1.4.0 -->
 ## Формат ответа
 
 Верни один JSON-объект с материалами варианта `{{variant_id}}`.
@@ -14,7 +14,7 @@
       "type": "как в плане",
       "title": "Название",
       "used_in_blocks": ["block_03"],
-      "audience": "teacher | pupil | pupils_group | parent | all",
+      "audience": "pupil",
       "content": "Полный готовый текст материала",
       "teacher_notes": "Как использовать",
       "print_required": false,
@@ -23,13 +23,15 @@
       "family_task": false
     }
   ],
-  "teacher_instructions": ["Что подготовить заранее", "Как организовать класс", "Что делать, если что-то пошло не так"],
+  "teacher_instructions": ["{{instruction_example}}", "Как организовать класс", "Что делать, если что-то пошло не так"],
   "voting": {{voting_example}},
   "teacher_fallback": {{fallback_example}},
   "fact_claims": []
 }
 ```
 
-Материалы из плана: {{planned_materials_list}}. `material_id` каждого материала - ровно ID из этого списка, без изменений и без суффиксов вроде `_01`; `type` - как в списке.
+Материалы из плана: {{planned_materials_list}}. `material_id` каждого материала - ровно ID из этого списка, без изменений и без суффиксов вроде `_01`; `type` - как в списке. ID пишутся только в полях `material_id`, `used_in_blocks` и `voting.material_ids`; в `content`, `teacher_notes` и `teacher_instructions` материал называется по названию, в ёлочках, без ID в скобках.
+
+`audience` - одно значение: `teacher`, `pupil`, `pupils_group`, `parent` или `all` (кому материал в руки).
 
 Допустимые `dependencies`: {{dependency_ids}}. Это расходники и оборудование, а не материалы: в `material_id` их не используй.

@@ -13,7 +13,13 @@
     "llm_quality_review": false,
     "max_repair_attempts_per_stage": 2,
     "provider_retry_attempts": 2,
-    "provider_retry_backoff_seconds": [3, 10]
+    "provider_retry_backoff_seconds": [3, 10],
+    "rate_limit_retry_attempts": 7,
+    "rate_limit_backoff_seconds": [5, 10, 20, 40, 60, 60, 60],
+    "unavailable_retry_attempts": 4,
+    "unavailable_backoff_seconds": [3, 10, 20, 30],
+    "retry_jitter": 0.3,
+    "block_timing_hints": true
   },
   "script_length": {
     "base_chars": {
@@ -29,7 +35,7 @@
     "age_factor": {
       "1-4": 0.7
     },
-    "warning_ratio": 0.9
+    "short_warning_ratio": 0.9
   },
   "audience_award_min_voters_warning": 6,
   "reasoning_extra_output_tokens": 2000,
