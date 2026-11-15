@@ -71,16 +71,26 @@ def _quoted(title: str) -> str:
     return title if "«" in title else f"«{title}»"
 
 
+# Названия наших служебных полей, которые модель употребляет в тексте как слово: «Используйте fact_claims
+# из справки для исторической части» (памятка к материалу, прогон 15.11). Пишутся без ёлочек: это не название.
+TECH_TERMS = {"fact_claims": "проверенные факты", "fact_claim": "проверенный факт", "source_id": "источник",
+              "fragment_id": "фрагмент источника"}
+# Эти три ищутся и нестрого («claims_fact», «fact_cliams», «id_source»); «fact_claim» - только точно: из тех же
+# слов, что «fact_claims», и нестрогий поиск при двух кандидатах ничего бы не подставил.
+TECH_TERMS_FUZZY = {"fact_claims", "source_id", "fragment_id"}
+
+
 def build_names(variant: dict[str, Any], dependencies: dict[str, dict[str, Any]] | None = None,
                 planned: list[dict[str, Any]] | None = None) -> dict[str, str]:
     """Словарь «ID -> как написать в тексте» для одного варианта.
 
     Порядок важен: материал варианта главнее одноимённого типа материала и запланированного материала.
-    Всё пишется в кавычках-ёлочках как название: так замена читается в любом падеже предложения.
+    Всё пишется в кавычках-ёлочках как название: так замена читается в любом падеже предложения;
+    служебные поля, упомянутые как слово (`TECH_TERMS`), - без ёлочек.
     `planned` - материалы плана (`material_id`, `type`, необязательный `title`): нужны, если материал
     упомянут в репликах, но на этапе материалов не создан.
     """
-    names: dict[str, str] = {}
+    names: dict[str, str] = dict(TECH_TERMS)
     for key, title in {**OTHER_TITLES, **MATERIAL_TYPE_TITLES}.items():
         names[key] = _quoted(title)
     for dep_id, item in (dependencies or {}).items():
@@ -282,7 +292,7 @@ def humanize_variant(variant: dict[str, Any], dependencies: dict[str, dict[str, 
     """Заменяет технические ID во всех текстовых полях варианта (на месте). Возвращает список замен для трассы."""
     names = build_names(variant, dependencies, planned)
     fuzzy = ({m.get("material_id") for m in variant.get("materials") or []} | {p.get("material_id") for p in planned or []}
-             | set(dependencies or {}) | set(MATERIAL_TYPE_TITLES))
+             | set(dependencies or {}) | set(MATERIAL_TYPE_TITLES) | TECH_TERMS_FUZZY)
     changes: list[dict[str, Any]] = []
 
     def record(where: str, ids: list[str], matched: dict[str, str]) -> None:

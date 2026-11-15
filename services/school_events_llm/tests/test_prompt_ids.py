@@ -14,6 +14,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from app.generation.humanize import humanize_variant
 from app.generation.pipeline import Generator
 from app.llm.fixture import FixtureLLM
 from app.trace import RunTrace
@@ -93,6 +94,30 @@ class ComposedPromptsTest(unittest.TestCase):
             prompt = (calls["materials"][0] / "prompt.md").read_text(encoding="utf-8")
             self.assertEqual({mid: prompt.count(f"`{mid}`") for mid in ids}, {mid: 1 for mid in ids})
             self.assertIn('"teacher_instructions": ["Подготовьте «', prompt)
+
+
+class FieldNameAsWordTest(unittest.TestCase):
+    def test_fact_claims_in_notes(self):
+        """Прогон 15.11 после правки промптов: ID материалов в ответах модели - ни одного, но в памятке к материалу
+        модель употребила название нашего поля как слово. В тексте - по-русски, без ёлочек."""
+        notes = "Разместите на видном месте возле каждой станции. Используйте fact_claims из справки для исторической части."
+        variant = {"timeline": [], "roles": [], "teacher_instructions": [],
+                   "materials": [{"material_id": "station_tasks", "title": "Задания станций", "content": "", "teacher_notes": notes}]}
+        self.assertEqual(humanize_variant(variant), [{"field": "materials.station_tasks.teacher_notes", "ids": ["fact_claims"]}])
+        self.assertEqual(variant["materials"][0]["teacher_notes"],
+                         "Разместите на видном месте возле каждой станции. Используйте проверенные факты из справки для исторической части.")
+
+    def test_field_name_variants(self):
+        """Другой порядок слов, число, опечатка - тоже заменяются; «fact_claim» - точно."""
+        cases = {"claims_fact": "проверенные факты", "facts_claims": "проверенные факты", "fact_cliams": "проверенные факты",
+                 "fact_claim": "проверенный факт", "fragments_id": "фрагмент источника", "id_source": "источник"}
+        for word, expected in cases.items():
+            with self.subTest(word=word):
+                variant = {"timeline": [], "roles": [], "teacher_instructions": [],
+                           "materials": [{"material_id": "station_tasks", "title": "Задания станций", "content": "",
+                                          "teacher_notes": f"Используйте {word} из справки."}]}
+                humanize_variant(variant)
+                self.assertEqual(variant["materials"][0]["teacher_notes"], f"Используйте {expected} из справки.")
 
 
 if __name__ == "__main__":
