@@ -58,6 +58,9 @@ class LLMClient:
     # Можно ли генерировать варианты одной задачи одновременно. Клиенты, которые отвечают записанными
     # ответами по порядку вызовов (повтор трасс в тестах), ставят False: при параллельных вариантах порядок другой.
     parallel_variants_safe: bool = True
+    # Поблажки к форме ответа (`app/generation/lenient.py`): "lenient" - только для моделей, которые пишут JSON
+    # небрежно (GigaChat-3-Pro); по умолчанию "strict" - ответ проверяется как есть.
+    output_fixes: str = "strict"
 
     def generate(self, *, messages: list[dict[str, str]], task_name: str, output_schema: dict | None,
                  max_tokens: int, temperature: float, meta: dict[str, Any] | None = None) -> LLMResult:
@@ -221,6 +224,7 @@ class OpenAICompatibleClient(LLMClient):
         self.thinking_method = cfg.get("disable_thinking_method", "strip_only")
         # Уровень рассуждений по умолчанию для модели (`low` / `medium` / `high`); этап может задать свой через meta.
         self.reasoning_effort = cfg.get("reasoning_effort")
+        self.output_fixes = str(cfg.get("output_fixes") or "strict")
         self._reasoning_param_unsupported = False
         self.local = bool(cfg.get("local", _is_local(self.base_url)))
         self.lock_cfg = lock_cfg if self.local else None

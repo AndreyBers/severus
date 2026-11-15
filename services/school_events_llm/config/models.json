@@ -81,6 +81,7 @@
       "timeout_seconds": 300,
       "max_concurrency": 1,
       "structured_output_mode": "none",
+      "output_fixes": "lenient",
       "reasoning_mode": "provider_default",
       "reasoning_effort": null,
       "disable_thinking_method": "strip_only",

@@ -155,16 +155,127 @@ def _loads_lenient(text: str) -> Any:
     return json.loads(text, strict=False)
 
 
-def extract_json(text: str) -> dict[str, Any]:
+def quote_keys(text: str) -> str:
+    """Ключи без кавычек и значения без ключа в объектах - в нормальный JSON (только вне строк).
+
+    GigaChat-3-Pro (прогон 15.11) с середины ответа переходит на запись JavaScript: `variant_id: "v1", block: {`,
+    и иногда пропускает ключ: `{"order": 3, "планирование и сборка", "activity_type": …}`. Ключ без кавычек
+    берётся в кавычки, значение без ключа получает ключ `_orphan_N` - его разбирает `lenient.fix_output`.
+    Ещё два случая того же прогона: слово без кавычек на месте значения (`["paper", printer]`) берётся в кавычки
+    (кроме true, false, null); забытая `}` между элементами списка (`…], {"variant_id": "v2"` внутри объекта
+    концепции) дописывается.
+    Строка сразу после строкового значения - не значение без ключа, а продолжение реплики, разбитой на абзацы
+    (`"teacher_script": "абзац 1", "абзац 2"`): её склеивает обычный разбор ниже. Для корректного JSON
+    ничего не меняет. Вызывается только для профилей с `"output_fixes": "lenient"`.
+    """
+    out: list[str] = []
+    stack: list[str] = []
+    expect_key = False
+    expect_value = False  # дальше - значение: после «:», «[» и «,» в списке
+    after_string = False  # последнее значение в объекте - строка
+    orphans = 0
+    i, n = 0, len(text)
+    while i < n:
+        ch = text[i]
+        if ch == '"':
+            j = i + 1
+            while j < n and text[j] != '"':
+                j += 2 if text[j] == "\\" else 1
+            token = text[i:j + 1]
+            k = j + 1
+            while k < n and text[k] in " \t\r\n":
+                k += 1
+            is_key = expect_key and k < n and text[k] == ":"
+            if expect_key and stack and stack[-1] == "{" and k < n and text[k] in ",}" and not after_string:
+                orphans += 1
+                out.append(f'"_orphan_{orphans}": ')
+            out.append(token)
+            after_string = not is_key
+            expect_key = expect_value = False
+            i = j + 1
+            continue
+        if expect_value and (ch.isalpha() or ch == "_"):
+            m = re.match(r"[^\s,\]\}\[\{:\"]+", text[i:])
+            word = m.group(0) if m else ""
+            if word and word not in ("true", "false", "null") and not re.fullmatch(r"-?\d", word[:1]):
+                out.append(json.dumps(word, ensure_ascii=False))
+                i += len(word)
+                expect_value = False
+                continue
+        if expect_key and stack and stack[-1] == "{" and (ch.isalpha() or ch == "_"):
+            m = re.match(r"[A-Za-z_][A-Za-z0-9_]*", text[i:])
+            if m:
+                k = i + m.end()
+                while k < n and text[k] in " \t\r\n":
+                    k += 1
+                if k < n and text[k] == ":":
+                    out.append(f'"{m.group(0)}"')
+                    i += m.end()
+                    expect_key = False
+                    continue
+        if ch == "{" and expect_key and len(stack) >= 2 and stack[-1] == "{" and stack[-2] == "[":
+            # Новый объект там, где ждали ключ: забыта «}» у предыдущего элемента списка.
+            k = len(out) - 1
+            while k >= 0 and out[k].isspace():
+                k -= 1
+            if k >= 0 and out[k] == ",":
+                out.insert(k, "}")
+                stack.pop()
+        if ch in "{[":
+            stack.append(ch)
+            expect_key = ch == "{"
+            expect_value = ch == "["
+            after_string = False
+        elif ch in "}]":
+            # «]» там, где открыт объект: забыта «}» (`…}\n    ]\n  ]\n}` в конце списка концепций).
+            if ch == "]" and len(stack) >= 2 and stack[-1] == "{" and "[" in stack:
+                out.append("}")
+                stack.pop()
+            if stack:
+                stack.pop()
+            expect_key = expect_value = False
+            after_string = False
+        elif ch == ",":
+            expect_key = bool(stack) and stack[-1] == "{"
+            expect_value = bool(stack) and stack[-1] == "["
+        elif ch == ":":
+            expect_key = False
+            expect_value = True
+        elif not ch.isspace():
+            expect_key = expect_value = False
+            after_string = False
+        out.append(ch)
+        i += 1
+    return "".join(out)
+
+
+def extract_json(text: str, lenient: bool = False) -> dict[str, Any]:
     """Извлекает первый корректный JSON-объект из сырого текстового ответа модели.
 
     Параметры:
-        `text`.
+        `text`; `lenient` - сначала поправить ключи без кавычек и значения без ключа (`quote_keys`),
+        для профилей с `"output_fixes": "lenient"`.
 
     Возвращает:
         dict[str, Any].
     """
     cleaned, _ = strip_reasoning(text)
+    if lenient:
+        # Только если ответ не разбирается как есть, а после `quote_keys` разбирается целиком. Иначе - обычный
+        # разбор исходного текста: при неэкранированной кавычке в реплике `quote_keys` теряет, где строка,
+        # и мог бы дописать кавычки внутри текста.
+        start, end = cleaned.find("{"), cleaned.rfind("}")
+        if 0 <= start < end:
+            body = cleaned[start:end + 1]
+            try:
+                json.loads(body, strict=False)
+            except ValueError:
+                try:
+                    fixed = json.loads(quote_keys(body), strict=False)
+                except ValueError:
+                    fixed = None
+                if isinstance(fixed, dict):
+                    return fixed
     candidates = [cleaned]
     candidates += [m.group(1).strip() for m in _FENCE.finditer(cleaned)]
     obj = _balanced_object(cleaned)

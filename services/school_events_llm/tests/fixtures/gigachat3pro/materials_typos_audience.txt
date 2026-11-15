@@ -1,0 +1,114 @@
+{
+  "schema_version": "1.2",
+  "task": "materials",
+  "variant_id": "v1",
+  "materials": [
+    {
+      "material_id": "poster_base",
+      "type": "props_checklist",
+      "title": "Большой лист ватмана для плаката",
+      "used_in_blocks": ["block_02"],
+      "audience": "teacher | pupils_group",
+      "content": "Основа для совместного рисунка и наклеек пожеланий.",
+      "teacher_notes": "Разложите ватман на столе или прикрепите к доске, чтобы все группы могли подойти и работать одновременно.",
+      "print_required": false,
+      "dependencies": ["whatman"],
+      "estimated_preparation_minutes": 5
+    },
+    {
+      "material_id": "markers_set",
+      "type": "props_checklist",
+      "title": "Набор цветных маркеров",
+      "used_in_blocks": ["block_02"],
+      "audience": "pupils_group",
+      "content": "Для рисования символов традиций и надписей.",
+      "teacher_notes": "Раскройте набор так, чтобы каждая группа могла взять свои цвета; следите за тем, чтобы дети не рисовали друг у друга на участке.",
+      "print_required": false,
+      "dependencies": ["markers"],
+      "estimated_preparation_minutes": 3
+    },
+    {
+      "material_id": "sticker_sheets",
+      "type": "props_checklist",
+      "title": "Листы со стикерами для пожеланий",
+      "used_inblocks": ["block_02", "block_04"],
+      "audience": "pupils_all",
+      "content": "Короткие пожелания классу (по желанию).",
+      "teacher_notes": "Положите листы рядом с ватманом — каждый ученик может написать пожелание после того, как нарисует символ традиции.",
+      "print_required": true,
+      "dependencies": ["sticky_notes"],
+      "estimated_preparation_minutes": 2
+    },
+    {
+      "material_id": "snowflake_tracers",
+      "type": "props_checklist",
+      "title": "Трафареты снежинок",
+      "used_in_blocks": ["block_03"],
+      "audience": "pupils_pair",
+      "content": "Обводим трафарет на белом листе бумаги, вырезаем по контуру.",
+      "teacher_notes": "Передайте каждому ученику пару листов и один трафарет; покажите пример обведения и вырезания.",
+      "print_required": false,
+      "dependencies": ["paper"],
+      "estimated_preparation_minutes": 5
+    },
+    {
+      "material_id": "paper_white",
+      "type": "props_checklist",
+      "title": "Белые листы бумаги",
+      "used_in_blocks": ["block_03"],
+      "audience": "pupils_pair",
+      "content": "Материал для изготовления снежинок.",
+      "teacher_notes": "Достаточно одного листа на пару учеников; при необходимости раздайте дополнительные листы в процессе работы.",
+      "print_required": false,
+      "dependencies": ["paper"],
+      "estimated_preparation_minutes": 5
+    },
+    {
+      "material_id": "scissors_safe",
+      "type": "props_checklist",
+      "title": "Безопасные ножницы",
+      "used_in_blocks": ["block_03"],
+      "audience": "pupils_pair",
+      "content": "Инструмент для вырезания снежинок.",
+      "teacher_notes": "Проверьте перед началом: лезвия закрыты, ручки целые. Покажите детям правильный хват и движение при резке.",
+      "print_required": false,
+      "dependencies": ["scissors"],
+      "estimated_preparation_minutes": 2
+    },
+    {
+      "material_id": "string_glue",
+      "type": "props_checklist",
+      "title": "Клей-карандаш",
+      "used_in_blocks": ["block_03"],
+      "audience": "pupils_pair",
+      "content": "Для склеивания элементов гирлянды из снежинок.",
+      "teacher_notes": "Покажите, как наносить клей тонким слоем, чтобы бумага не промокла. Следите, чтобы никто не тянул руки ко рту.",
+      "print_required": false,
+      "dependencies": ["glue"],
+      "estimated_preparation_minutes": 2
+    },
+    {
+      "material_id": "parent_instruction",
+      "type": "parent_instruction",
+      "title": "Памятка для родителей-помощников",
+      "used_in_blocks": ["block_02", "block_03"],
+      "audience": "parent",
+      "content": "В блоке «Творческая мастерская» помогайте группе распределить роли: кто рисует, кто пишет пожелания, кто следит за временем. В блоке «Оформление класса» работайте в паре с ребёнком: подскажите, как правильно держать ножницы и бумагу, похвалите аккуратность. Не делайте работу за ребёнка, а направляйте и поддерживайте его инициативу.",
+      "teacher_notes": "Раздайте памятку родителям сразу при входе или перед началом мероприятия. Если родитель занят другой ролью, дайте ему эту инструкцию заранее.",
+      "print_required": true,
+      "dependencies": [],
+      "estimated_preparation_minutes": 2
+    }
+  ],
+  "teacher_instructions": [
+    "Подготовьте ватман, маркеры, стикеры, бумагу, трафареты, безопасные ножницы и клей заранее; разложите материалы по группам и парам.",
+    "Организуйте класс: разделите детей на пять групп по 4 человека, включив в каждую группу родителя-помощника; пары для вырезания снежинок формируйте сами или по желанию детей.",
+    "Объясните правила безопасности при работе с ножницами и клеем; напомните о бережном отношении к материалам и уважении к работам других.",
+    "Во время творческой мастерской наблюдайте за процессом, подсказывайте идеи рисунков и помогайте с формулировкой пожеланий.",
+    "Если родители задерживаются или их меньше четырёх, перераспределите задачи между детьми и вами, чтобы никто не остался без дела.",
+    "В конце соберите все снежинки и повесьте гирлянду в классе, отметьте вклад каждого участника устной благодарностью."
+  ],
+  "voting": null,
+  "teacher_fallback": "Как провести без родителей: объедините детей в те же группы по 4 человека, распределяя обязанности внутри каждой команды самостоятельно; во время оформления класса учитель помогает всем парам одновременно, показывая технику вырезания и склеивания.",
+  "fact_claims": []
+}

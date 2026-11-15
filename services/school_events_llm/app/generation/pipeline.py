@@ -34,6 +34,7 @@ from ..trace import RunTrace
 from ..usage import TokenTally
 from ..validation.checks import FAMILY_ALTERNATIVE, Issue, diversity_issues, report_status, validate_variant
 from .grouping import compute_grouping, describe
+from .lenient import fix_output
 from .humanize import MATERIAL_TYPE_TITLES, blank_template_dates, drop_meta_notes, humanize_variant
 from .plan_fixes import fallback_material, fix_parent_role_counts, fix_plan_for_request, fix_type_by_id, fix_vote_quiz
 from .source_refs import move_source_refs, register_fragment_facts
@@ -666,7 +667,7 @@ class Generator:
     # Выполнение этапа с ограниченным числом попыток исправления.
     def call_stage(self, stage: str, n: NormalizedRequest, *, stage_input: str = "", output_vars: dict | None = None,
                    meta: dict | None = None, repair: dict | None = None, variant_id: str | None = None,
-                   parent_call_id: str | None = None) -> StageResult:
+                   parent_call_id: str | None = None, plan: dict | None = None) -> StageResult:
         """Вызывает один LLM-этап, проверяет JSON по Pydantic-схеме и при ошибке выполняет ограниченный repair.
 
         Параметры:
@@ -700,7 +701,14 @@ class Generator:
                     max_tokens=self.max_output_tokens(stage, n), temperature=float(task_cfg["temperature_hint"]),
                     meta={**(meta or {}), "call_id": call_id, "reasoning_effort": self.reasoning_effort(stage)})
                 raw = result.text
-                data = extract_json(raw)
+                # Профиль с `"output_fixes": "lenient"` (GigaChat-3-Pro): ключи без кавычек и опечатки в ключах
+                # чинятся по схеме этапа и плану (`app/generation/lenient.py`); у остальных профилей - как раньше.
+                lenient = getattr(self.client, "output_fixes", "strict") == "lenient"
+                data = extract_json(raw, lenient=lenient)
+                if lenient:
+                    shape = fix_output(stage, data, model_cls, plan=plan, block_id=(meta or {}).get("block_id"))
+                    if shape:
+                        self.trace.event("output_shape_fixed", call_id=call_id, stage=stage, variant_id=variant_id, fixes=shape)
                 mechanics = {vid: list(value.get("allowed_mechanic_types") or []) for vid, value in self.catalog.values.items()}
                 quotes = {f["fragment_id"]: str(f.get("quote") or f.get("text") or f.get("text_excerpt") or "").strip()
                           for f in self.catalog.verified_fragments(n.event_id, n.region_id, n.cultural_context)}
@@ -1059,7 +1067,8 @@ class Generator:
             if blocks_res is None:
                 if not per_block:
                     res = self.call_stage("scenario_blocks", n, stage_input=self.plan_text(plan, grid, (g_mode, sizes), script_chars=script_chars),
-                                          output_vars={"variant_id": vid}, meta=vmeta, variant_id=vid, repair=repair_for.pop("blocks", None))
+                                          output_vars={"variant_id": vid}, meta=vmeta, variant_id=vid, repair=repair_for.pop("blocks", None),
+                                          plan=plan)
                     block_details = {b.block_id: b.model_dump() for b in res.model.blocks}
                     block_raw = {"__all__": res.raw}
                     claims = [c.model_dump() for c in res.model.fact_claims]
@@ -1071,7 +1080,7 @@ class Generator:
                                               stage_input=self.plan_text(plan, grid, (g_mode, sizes), b["block_id"], prev, script_chars),
                                               output_vars={"variant_id": vid, "block_id": b["block_id"], "start_minute": str(start), "block_minutes": str(dur),
                                                            "materials_hint": self.materials_hint(plan, b)},
-                                              meta={**vmeta, "block_id": b["block_id"]}, variant_id=vid, repair=rep_all)
+                                              meta={**vmeta, "block_id": b["block_id"]}, variant_id=vid, repair=rep_all, plan=plan)
                         block_details[b["block_id"]] = res.model.block.model_dump()
                         block_raw[b["block_id"]] = res.raw
                         claims += [c.model_dump() for c in res.model.fact_claims]
@@ -1114,7 +1123,7 @@ class Generator:
                                           + self.blocks_text(timeline, self.material_titles(plan)),
                                           output_vars={"variant_id": vid, "planned_materials_list": self.planned_materials_list(plan),
                                                        "instruction_example": self.instruction_example(plan)},
-                                          meta=vmeta, variant_id=vid, repair=repair_for.pop("materials", None))
+                                          meta=vmeta, variant_id=vid, repair=repair_for.pop("materials", None), plan=plan)
             mat = mat_res.model
             renamed = reconcile_material_ids(plan.get("planned_materials", []), mat.materials)
             if renamed:
