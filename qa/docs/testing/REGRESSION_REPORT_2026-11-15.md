@@ -2,34 +2,34 @@
 
 ## 1. Сборка
 
-- `QA/Maksim`, merge `82f7992`.
+- `QA/Maksim`, merge `f66d242`.
 - `origin/main` `00bd66b`: backend LLM failures, каталог 1114 (christmas, last_bell, unity_day).
-- PR #30 `036f713`: INNER-TIMING, TECH-ID, 90% script threshold, параллельные варианты, block timing hints.
+- PR #30 `11f1d65`: BUG-20 (короткие ответы), BUG-23 (расходники и сообщение), BUG-06 (формат замечаний), BUG-04 (эталон по событию).
 - PR #27/#28/#29 не влиты.
 
 ## 2. Результаты
 
 | Проверка | Результат |
 |---|---|
-| Юнит-тесты LLM-сервиса | 364 passed, 1159 subtests |
+| Юнит-тесты LLM-сервиса | 377 passed, 1161 subtests |
 | QA-тесты | 30 passed |
 | Backend | 65 passed |
 | `qa_check_1114c` | 10/10 `completed`, критичных — 0 |
-| API-регрессия | 7/7 `completed` |
+| API-регрессия | 7/7 `completed`, `quality` — `passed` у всех вариантов |
 | UI-регрессия | 17/17 PASS |
 
 ## 3. Reasoning medium
 
 - Проверка с `LLM_REASONING=*=medium`.
-- В манифестах `reasoning_effort=medium`, `response.reasoning.txt` создаётся.
-- 3 варианта: `job_393071c8699c45acb33d78ece1449057`, 158,8 с, 3/3 — параллельный запуск работает.
+- В батче 94 из 94 вызовов: `reasoning_effort=medium`, `reasoning_chars > 0`, файл `response.reasoning.txt` создан.
 - В `config/generation.json` по умолчанию `null`; medium включается через env/`.env`.
+- 3 варианта: `job_549cf6f0e745428bb6dc7db8d3cbf8c3`, 180,9 с, 3/3 — параллельный запуск работает.
 
 ## 4. Предупреждения
 
 | Прогон | Предупреждения |
 |---|---|
-| `c01` defender 8/45 | `INNER-TIMING` (block_01 — ложный: параллельное обсуждение 5 групп) |
+| `c01` defender 8/45 | — |
 | `c02` womens 3/30 parents vote | — |
 | `c03` victory 9/45 no tech | — |
 | `c04` teachers 11/30 | — |
@@ -37,29 +37,26 @@
 | `c06` graduation 11/60 jury | — |
 | `c07` labour 7/45 no groups | — |
 | `c08` middle urals 5/30 | — |
-| `c09` new_year 2/30 helpers 2var | `INNER-TIMING` (v2 block_04 — ложный: параллельное обсуждение) |
+| `c09` new_year 2/30 helpers 2var | `QUIZ-KEY` (v2, ложное: ответы есть в скобках; см. BUG-24) |
 | `c10` sverdlovsk 9/45 large class | — |
-| API `minimal_resources` | `TECH-ID-IN-TEXT` на `tissues`, `water cups` |
+| API-регрессия, 7 кейсов | — |
 | UI | — |
+
+`INNER-TIMING` не сработал ни разу. `SCRIPT-SHORT`, `TECH-ID-IN-TEXT`, `FACT-UNREGISTERED` в этом прогоне тоже не появлялись.
 
 ## 5. Закрыто
 
-- **BUG-05** — 90% порог, `SCRIPT-SHORT` больше не шумит.
-- **BUG-11** — 2023/1699 без ложных предупреждений.
-- **BUG-16** — внутренние ID в репликах не воспроизводятся; UI чист.
-- **BUG-18** — станции считаются верно.
-- **BUG-19** — вертеп убран.
-- **BUG-21** — large_class_35 прошёл, schema-fail не повторился.
-- **BUG-22** — 3 варианта 158,8 с, параллельно.
-- **BUG-14 / BUG-17 / BUG-09** — подтверждены.
+- **BUG-20** — короткие ответы больше не считаются выступлениями: `_BRIEF` в `app/validation/inner_timing.py:78-81`, проверка на `:283`. Старые проблемные блоки `job_20261115_123555_b0c44a` (v1 block_01) и `job_20261115_125732_3adb26` (v2 block_04) на новом коде дают пустой список замечаний. В новом прогоне `c01`/`c09` сценарии другие, но проверка на них молчит.
+- **BUG-06** — `quality_report.issues` по ТЗ 16.2: `issue_id`, `category`, `repairable`, `suggested_action` (`app/validation/issue_format.py`). Живой пример — `job_20261115_142516_3b0827`, v2: `Q-001`, `QUIZ-KEY`, `materials`, `repairable=true`, «Добавить в викторину правильные ответы».
+- **BUG-04** — fixture выбирает эталон по `event_id`: `app/llm/fixture.py` (`_ordered`), `app/generation/pipeline.py` передаёт `event_id` в `meta`; покрыто `tests/test_qa_bugs_1115.py`.
+- **BUG-23** — не баг: предупреждение о непереведённых английских словах намеренное. Плюс PR #30 добавил переводы расходников: `normalize_dependencies` даёт «стаканчики для воды, салфетки».
+- **BUG-05 / BUG-11 / BUG-16 / BUG-18 / BUG-19 / BUG-21 / BUG-22 / BUG-14 / BUG-17 / BUG-09** — подтверждены повторно, без новых замечаний.
 
 ## 6. Остаётся
 
-- **BUG-20 (P2):** `INNER-TIMING` считает параллельное обсуждение групп последовательными выступлениями: `c01` block_01 и `c09` v2 block_04 — 5 групп × 2 мин = 10 при блоке 5. Файл `app/validation/inner_timing.py:43`, `:192`, `:206-215`.
-- **BUG-23 (P3):** `TECH-ID-IN-TEXT` ловит обычные английские слова `tissues`, `water cups` в `materials.art_supplies` (`job_b56da75d30c44767b5823d50f90f81b1`).
-- **BUG-12 / BUG-15 (P2):** фронтенд: нет `parent_audience_engagement`, по умолчанию `detailed`.
-- **BUG-06 (P2):** формат issue не по ТЗ.
-- **BUG-04 / BUG-07 (P3):** fixture и демо-каталог.
+- **BUG-12 / BUG-15 (P2, Оля):** фронтенд — нет `parent_audience_engagement`, по умолчанию `detailed`.
+- **BUG-07 (P3):** демо-каталог `frontend/src/api.ts` расходится с реальным.
+- **BUG-24 (P3, новое):** `QUIZ-KEY` не видит ответы в скобках и сообщает «нет ключа ответов»; в том же листе дублируется «Группа 3». Файл `app/validation/checks.py:436`, пример `job_20261115_142516_3b0827` v2.
 - **BUG-13** — отложен до PR #27.
 
 P1 нет.
@@ -68,13 +65,13 @@ P1 нет.
 
 | Группа | Запросов | Время | Токены |
 |---|---:|---:|---:|
-| `qa_check_1114c` | 10 | 26,4 мин | 324 764 |
-| API-регрессия | 7 | 16,8 мин | 254 175 |
-| UI | 2 | 4,7 мин | 77 987 |
-| **Итого** | **19** | **47,9 мин** | **656 926** |
+| `qa_check_1114c` | 10 | 21,9 мин | 311 275 |
+| API-регрессия | 7 | 16,3 мин | 252 705 |
+| UI | 2 | 4,8 мин | 77 136 |
+| **Итого** | **19** | **43,0 мин** | **641 116** |
 
-Prompt — 476 148, completion — 180 778; среднее — 34 575 токенов на запрос. Wall-clock около 47 минут.
+Prompt — 460 167, completion — 180 949; среднее — 33 743 токена на запрос. Wall-clock около 43 минут.
 
 ## 8. Вывод
 
-Основные исправления подтверждены: 90% порог, TECH-ID, 1612/станции/вертеп, жюри, родители, 35 учеников и 3 варианта. Блокирующих P1 нет. Остались ложный `INNER-TIMING` на параллельных обсуждениях и P3-калибровка TECH-ID; фронтенд и формат issue — без изменений.
+Все четыре фикса PR #30 подтверждены: `INNER-TIMING` на коротких ответах, формат замечаний, эталон по событию и перевод расходников. Регрессий нет: API 7/7 с `quality=passed`, UI 17/17, батч 10/10. Блокирующих P1 нет. Остались фронтенд-задачи Оли, демо-каталог и одно новое P3-наблюдение по `QUIZ-KEY`.
