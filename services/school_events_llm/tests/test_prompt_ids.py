@@ -99,8 +99,10 @@ class ComposedPromptsTest(unittest.TestCase):
 class PromptRulesTest(unittest.TestCase):
     def test_rules_from_final_runs(self):
         """Четыре финальных прогона 15.11 (99 вариантов): модель копировала образец «teacher | pupil | …» в `audience`,
-        писала механики ценностей в `activity_type`, брала даты из своих знаний (Гагарин 1961, указ 1699, «2023 год»
-        в шаблоне) и ссылалась в блоках на роли, которых нет в `roles` (4 повторных вызова плана)."""
+        брала даты из своих знаний (Гагарин 1961, указ 1699, «2023 год» в шаблоне) и ссылалась в блоках на роли,
+        которых нет в `roles`. Прогон с правкой промптов: образец деления класса с одним значением
+        (`"mode": "small_groups", "groups_count": 4`) модель скопировала - малые группы в 20 вариантах из 25 вместо 11-13,
+        а строка «механики в `activity_type` не пиши» дала их больше (24 вместо 15): обе правки убраны."""
         with tempfile.TemporaryDirectory() as tmp:
             run_dir = Path(tmp) / "run"
             trace = RunTrace(run_dir, full_prompts=True, full_responses=False, secrets=[])
@@ -109,10 +111,9 @@ class PromptRulesTest(unittest.TestCase):
             for call in sorted((run_dir / "calls").iterdir()):
                 stage = json.loads((call / "manifest.json").read_text(encoding="utf-8"))["stage"]
                 prompts.setdefault(stage, []).append((call / "prompt.md").read_text(encoding="utf-8"))
-        self.assertIn("Названия механик ценностей в `activity_type` не пиши", prompts["variation_plan"][0])
+        self.assertNotIn("joint_product", prompts["variation_plan"][0].split("`mechanic_type`:")[0])
         plan = prompts["scenario_plan"][0]
-        self.assertIn('"mode": "small_groups"', plan)
-        self.assertNotIn("whole_class | pairs", plan)
+        self.assertIn('"mode": "whole_class | pairs | small_groups | mixed", "groups_count": 1', plan)
         self.assertIn("каждый ID из `role_ids` блоков объявлен в `roles`", plan)
         for block in prompts["scenario_block"]:
             self.assertIn("если во фрагментах даты нет, спроси без даты", block)

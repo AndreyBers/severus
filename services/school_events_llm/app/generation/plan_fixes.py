@@ -84,6 +84,45 @@ def fix_parent_role_counts(roles: Any, changes: list[dict[str, Any]]) -> None:
                 role["count"] = 1
 
 
+# Роль родителей по её ID: «parent_helpers» - помощники, «parent_audience» - зрители.
+_PARENT_MODE_WORDS = (
+    ("helper", re.compile(r"help|assist|volunteer|помощ", re.I)),
+    ("audience", re.compile(r"audience|viewer|spectator|guest|watch|зрител", re.I)),
+    ("evaluator", re.compile(r"jury|judge|evaluat|expert|жюри|эксперт", re.I)),
+    ("active_participant", re.compile(r"participant|active|player|team|участ", re.I)),
+)
+_PARENT_ROLE_TITLES = {"helper": "Родители-помощники", "audience": "Родители-зрители", "evaluator": "Родители-жюри",
+                       "active_participant": "Родители-участники"}
+
+
+def declare_parent_roles(data: Any, parents_enabled: bool, parent_roles: list[str], parents_count: int,
+                         changes: list[dict[str, Any]]) -> None:
+    """Роль родителей, на которую ссылается блок плана, но которой нет в `roles`, - в `roles` (меняет план на месте).
+
+    Модель ставит в блок `parent_helpers`, а в `roles` объявляет только зрителей: план падал с `PLAN-REF-ROLE`
+    и вызывался повторно (4 раза на 99 вариантов в финальных прогонах 15.11, правка промпта не помогла).
+    Роль добавляется, только если родители включены, ID говорит о родителях и режим роли разрешён запросом;
+    число - все пришедшие родители, лишнее в одном этапе потом убирает `fix_plan_for_request`.
+    """
+    if not parents_enabled or not isinstance(data, dict):
+        return
+    roles, blocks = data.get("roles"), data.get("blocks")
+    if not isinstance(roles, list) or not isinstance(blocks, list):
+        return
+    declared = {r.get("role_id") for r in roles if isinstance(r, dict)}
+    for block in blocks:
+        for role_id in (block.get("role_ids") or []) if isinstance(block, dict) else []:
+            if not isinstance(role_id, str) or role_id in declared or not re.search(r"parent|родител", role_id, re.I):
+                continue
+            mode = next((m for m, words in _PARENT_MODE_WORDS if words.search(role_id)), None)
+            if mode is None or mode not in parent_roles:
+                continue
+            roles.append({"role_id": role_id, "participant_type": "parent", "role_mode": mode,
+                          "title": _PARENT_ROLE_TITLES[mode], "count": max(parents_count, 1)})
+            declared.add(role_id)
+            changes.append({"kind": "parent_role_declared", "role_id": role_id, "role_mode": mode, "count": max(parents_count, 1)})
+
+
 def _unique_id(base: str, taken: set[str]) -> str:
     candidate, number = base, 2
     while candidate in taken:

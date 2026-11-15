@@ -1,4 +1,4 @@
-<!-- id: output.scenario_plan | version: 1.2.0 -->
+<!-- id: output.scenario_plan | version: 1.3.0 -->
 ## Формат ответа
 
 Верни один JSON-объект плана для варианта `{{variant_id}}`. Сумма `proposed_minutes` = {{duration_minutes}}.
@@ -18,7 +18,7 @@
       {"value_id": "{{first_value_id}}", "mechanic_type": "…", "mechanic": "Как реализуется действием участников", "block_ids": ["block_03"]}
     ]
   },
-  "grouping_request": {"mode": "small_groups", "groups_count": 4, "block_ids": ["block_03"]},
+  "grouping_request": {"mode": "whole_class | pairs | small_groups | mixed", "groups_count": 1, "block_ids": ["block_03"]},
   "roles": [
     {"role_id": "teacher_1", "participant_type": "teacher", "title": "Ведущий педагог", "count": 1},
     {"role_id": "pupils_all", "participant_type": "pupils_group", "title": "Учащиеся", "count": {{pupils_count}}}{{parent_roles_example}}
@@ -33,5 +33,4 @@
 ```
 
 `type` материала: teacher_instruction | worksheet | activity_card | slide_outline | quiz | discussion_questions | handout | props_checklist | parent_instruction | audience_ballot | jury_scorecard | award_instruction.
-`grouping_request.mode` - одно значение: `whole_class`, `pairs`, `small_groups` или `mixed`.
 `role_id` и `material_id` - латиница, цифры и `_`, начинаются с буквы. В `values_to_mechanics` - ровно ценности: {{value_ids}}.

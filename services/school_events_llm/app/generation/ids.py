@@ -190,6 +190,10 @@ _THING_ADJ_RU = {
 _THING_RU_SINGULAR = {"картон", "цветной картон", "пластилин", "глина", "акварель", "гуашь", "верёвка", "ткань", "вода",
                       "мяч", "корзина", "карта", "глобус", "колонка", "ноутбук", "микрофон", "фотоаппарат", "степлер",
                       "гирлянда", "клеевой пистолет", "рулетка"}
+# Цвет перед расходником словаря - тот же расходник: «red_paper» - бумага (третий финальный прогон 15.11 с правкой
+# промптов: «Также понадобится: red «Бумага А4»»). Размер («large_paper») не берётся: большая бумага - это ватман.
+_COLOR_WORDS = {"red", "green", "blue", "yellow", "white", "black", "pink", "orange", "purple", "gold", "golden", "silver",
+                "colored", "coloured", "color", "colour", "multicolored", "bright"}
 NOTE_PREFIX = "Также понадобится: "
 
 
@@ -256,7 +260,11 @@ def _dependency_key(key: str, dependency_ids: set[str]) -> str | None:
         diff = [(a, b) for a, b in zip(words, parts) if a != b]
         if len(parts) == len(words) and len(diff) == 1 and min(len(diff[0][0]), len(diff[0][1])) >= 5 and one_edit(*diff[0]):
             targets.add(known if known in dependency_ids else DEPENDENCY_SYNONYMS[known])
-    return targets.pop() if len(targets) == 1 else None
+    if len(targets) == 1:
+        return targets.pop()
+    if not targets and len(words) > 1 and all(w in _COLOR_WORDS for w in words[:-1]):
+        return _dependency_key(words[-1], dependency_ids)
+    return None
 
 
 def _match_dependency(raw: str, dependency_ids: set[str]) -> tuple[list[str], list[str]]:

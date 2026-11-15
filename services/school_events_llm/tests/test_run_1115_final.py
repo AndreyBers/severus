@@ -24,6 +24,7 @@ from app.contracts.llm import STAGE_MODELS
 from app.generation.dates import YEAR
 from app.generation.humanize import blank_template_dates
 from app.generation.ids import normalize_dependencies, untranslated_things
+from app.generation.plan_fixes import declare_parent_roles
 from app.validation.inner_timing import inner_timing_problems
 from app.generation.pipeline import _audience, prepare_stage_output
 from app.llm.jsonx import extract_json
@@ -94,6 +95,14 @@ class ThingsTest(unittest.TestCase):
                          "Разложите заранее. Также понадобится: пайетки, ленты, картонные фигурки, большие картонные коробки, пазлы, мяч, коробки.")
         self.assertEqual(untranslated_things(material["teacher_notes"]), [])
 
+    def test_color_of_dictionary_item(self):
+        """«red_paper» - бумага из словаря (прогон с правкой промптов: «Также понадобится: red «Бумага А4»»)."""
+        material, _ = self.normalize(["red_paper", "blue_paper"])
+        self.assertEqual(material["dependencies"], ["paper"])
+        self.assertEqual(material["teacher_notes"], "Разложите заранее.")
+        material, _ = self.normalize(["large_paper"])
+        self.assertNotIn("paper", material["dependencies"])
+
     def test_material_is_not_dependency(self):
         material, changes = self.normalize(["audience_ballot", "markers"], other_ids=("audience_ballot",))
         self.assertEqual(material["dependencies"], ["markers"])
@@ -118,6 +127,35 @@ class ThingsTest(unittest.TestCase):
         self.assertEqual(variant["materials"][0]["content"],
                          'Верхний заголовок: "Наша Стена Памяти", внизу подпись: "Класс 9-а, 20__ год". Между ячейками поля.')
         self.assertEqual(variant["materials"][1]["content"], 'Надпись: "Победа, 1945 год".')
+
+
+class ParentRolesTest(unittest.TestCase):
+    PLAN = {"roles": [{"role_id": "teacher_1", "participant_type": "teacher", "title": "Ведущий педагог", "count": 1},
+                      {"role_id": "pupils_all", "participant_type": "pupils_group", "title": "Учащиеся", "count": 22},
+                      {"role_id": "parent_audience", "participant_type": "parent", "role_mode": "audience",
+                       "title": "Родители-зрители", "count": 5}],
+            "blocks": [{"block_id": "block_03", "role_ids": ["teacher_1", "pupils_all", "parent_helpers"]},
+                       {"block_id": "block_04", "role_ids": ["teacher_1", "pupils_all", "parent_audience"]}]}
+
+    def test_helpers_declared(self):
+        """Прогон с правкой промптов, Международный женский день, вариант 1: `parent_helpers` в блоке без роли."""
+        plan = copy.deepcopy(self.PLAN)
+        changes: list[dict] = []
+        declare_parent_roles(plan, True, ["helper", "audience"], 5, changes)
+        self.assertIn({"role_id": "parent_helpers", "participant_type": "parent", "role_mode": "helper",
+                       "title": "Родители-помощники", "count": 5}, plan["roles"])
+        self.assertEqual(changes, [{"kind": "parent_role_declared", "role_id": "parent_helpers", "role_mode": "helper", "count": 5}])
+
+    def test_not_declared_without_request(self):
+        for parents_enabled, roles in ((False, ["helper"]), (True, ["audience"])):
+            with self.subTest(parents_enabled=parents_enabled, roles=roles):
+                plan = copy.deepcopy(self.PLAN)
+                declare_parent_roles(plan, parents_enabled, roles, 5, [])
+                self.assertEqual(len(plan["roles"]), 3)
+        plan = copy.deepcopy(self.PLAN)
+        plan["blocks"][0]["role_ids"].append("guest_star")
+        declare_parent_roles(plan, True, ["helper", "audience"], 5, [])
+        self.assertNotIn("guest_star", {r["role_id"] for r in plan["roles"]})
 
 
 class InnerTimingTest(unittest.TestCase):

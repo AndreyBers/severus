@@ -1,4 +1,4 @@
-<!-- id: output.variation_plan | version: 1.1.0 -->
+<!-- id: output.variation_plan | version: 1.2.0 -->
 ## Формат ответа
 
 Верни один JSON-объект. В `concepts` ровно {{variants_count}} элемент(а), `variant_id` - {{variant_ids}}.
@@ -34,6 +34,5 @@
 ```
 
 `activity_type`: discussion | team_task | pair_task | individual_task | game | quiz | source_work | creative_product | performance | project_pitch | research | reflection | voting.
-Названия механик ценностей в `activity_type` не пиши: совместный продукт - `creative_product`, общее дело класса - `team_task`.
 `mechanic_type`: family_research | team_task | source_work | joint_product | culture_comparison | real_problem_solving | class_collective_task | pair_task | discussion.
 В `values_to_mechanics` - ровно ценности события: {{value_ids}}.

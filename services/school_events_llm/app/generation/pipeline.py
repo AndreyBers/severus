@@ -36,7 +36,8 @@ from ..validation.checks import FAMILY_ALTERNATIVE, Issue, diversity_issues, rep
 from .grouping import compute_grouping, describe
 from .lenient import fix_output
 from .humanize import MATERIAL_TYPE_TITLES, blank_template_dates, drop_meta_notes, humanize_variant
-from .plan_fixes import fallback_material, fix_parent_role_counts, fix_plan_for_request, fix_type_by_id, fix_vote_quiz
+from .plan_fixes import (declare_parent_roles, fallback_material, fix_parent_role_counts, fix_plan_for_request,
+                         fix_type_by_id, fix_vote_quiz)
 from .source_refs import move_source_refs, register_fragment_facts
 from .ids import normalize_dependencies, normalize_ids, normalize_material_fields
 from .timing import build_grid, normalize_minutes
@@ -723,6 +724,8 @@ class Generator:
                 quotes = {f["fragment_id"]: str(f.get("quote") or f.get("text") or f.get("text_excerpt") or "").strip()
                           for f in self.catalog.verified_fragments(n.event_id, n.region_id, n.cultural_context)}
                 fixes = prepare_stage_output(stage, data, resource_ids(n), set(self.catalog.dependencies), mechanics, quotes)
+                if stage == "scenario_plan":
+                    declare_parent_roles(data, n.parents_enabled, list(n.parent_roles), n.parents_count, fixes)
                 if fixes:
                     self.trace.event("stage_output_fixed", call_id=call_id, stage=stage, variant_id=variant_id, fixes=fixes)
                 parsed_obj = model_cls.model_validate(data)
