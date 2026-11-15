@@ -2,11 +2,10 @@
 
 Сборка: `QA/Maksim`, merge `f66d242`: `origin/main` `00bd66b` + PR #30 `11f1d65` (BUG-20, BUG-23, BUG-06, BUG-04).
 
-**Reasoning medium**
+**Reasoning**
 
-- Проверял с `LLM_REASONING=*=medium`.
-- В батче 94 из 94 вызовов: `reasoning_effort=medium`, `reasoning_chars > 0`, `response.reasoning.txt` создаётся.
-- В `config/generation.json` по умолчанию `null`; medium включается через env/`.env`.
+- По умолчанию рассуждения выключены: `config/generation.json` — `reasoning_effort: null`, `LLM_REASONING` в `.env` пустой; в конфиг ничего не добавлял.
+- Разовый прогон 15.11 шёл с `LLM_REASONING=*=medium`: в манифестах 94 из 94 вызовов `reasoning_effort=medium`, `response.reasoning.txt` создаётся.
 - 3 варианта идут параллельно: 180,9 с, 3/3.
 
 **Что закрыто и подтверждено**

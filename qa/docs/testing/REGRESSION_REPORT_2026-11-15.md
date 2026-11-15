@@ -18,11 +18,11 @@
 | API-регрессия | 7/7 `completed`, `quality` — `passed` у всех вариантов |
 | UI-регрессия | 17/17 PASS |
 
-## 3. Reasoning medium
+## 3. Reasoning
 
-- Проверка с `LLM_REASONING=*=medium`.
+- По умолчанию рассуждения выключены: в `config/generation.json` у всех этапов `reasoning_effort: null`, `LLM_REASONING` в `.env` пустой.
+- Разовый прогон 15.11 шёл с `LLM_REASONING=*=medium` — проверка, что сервис работает и с рассуждениями; в конфиг это не внесено.
 - В батче 94 из 94 вызовов: `reasoning_effort=medium`, `reasoning_chars > 0`, файл `response.reasoning.txt` создан.
-- В `config/generation.json` по умолчанию `null`; medium включается через env/`.env`.
 - 3 варианта: `job_549cf6f0e745428bb6dc7db8d3cbf8c3`, 180,9 с, 3/3 — параллельный запуск работает.
 
 ## 4. Предупреждения
