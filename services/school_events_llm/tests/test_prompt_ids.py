@@ -125,7 +125,21 @@ class FieldNameAsWordTest(unittest.TestCase):
                    "teacher_instructions": ["Подготовьте все материалы заранее, следуя рекомендациям в teacher_notes каждого материала."]}
         self.assertEqual(humanize_variant(variant), [{"field": "teacher_instructions[0]", "ids": ["teacher_notes"]}])
         self.assertEqual(variant["teacher_instructions"][0],
-                         "Подготовьте все материалы заранее, следуя рекомендациям в заметки для педагога каждого материала.")
+                         "Подготовьте все материалы заранее, следуя рекомендациям в заметках для педагога каждого материала.")
+
+    def test_field_name_after_preposition(self):
+        """После предлога - нужный падеж («в заметках», «из проверенных фактов»), без предлога - как в `TECH_TERMS`."""
+        cases = {"Сверьтесь с тем, что в teacher_notes.": "Сверьтесь с тем, что в заметках для педагога.",
+                 "Возьмите даты из fact_claims.": "Возьмите даты из проверенных фактов.",
+                 "Говорите по fact_claims.": "Говорите по проверенным фактам.",
+                 "Сведения о source_id не нужны.": "Сведения об источнике не нужны.",
+                 "Используйте fact_claims и teacher_notes.": "Используйте проверенные факты и заметки для педагога.",
+                 "Положите на teacher_notes.": "Положите на заметки для педагога."}
+        for text, expected in cases.items():
+            with self.subTest(text=text):
+                variant = {"timeline": [], "roles": [], "materials": [], "teacher_instructions": [text]}
+                humanize_variant(variant)
+                self.assertEqual(variant["teacher_instructions"][0], expected)
 
 
 if __name__ == "__main__":

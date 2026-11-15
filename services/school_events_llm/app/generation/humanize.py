@@ -80,6 +80,39 @@ TECH_TERMS = {"fact_claims": "проверенные факты", "fact_claim": 
 # Эти три ищутся и нестрого («claims_fact», «fact_cliams», «id_source»); «fact_claim» - только точно: из тех же
 # слов, что «fact_claims», и нестрогий поиск при двух кандидатах ничего бы не подставил.
 TECH_TERMS_FUZZY = {"fact_claims", "source_id", "fragment_id"}
+# Те же слова после предлога: «рекомендациям в teacher_notes» -> «в заметках для педагога», а не «в заметки для
+# педагога» (финальный прогон 15.11, второй раз та же фраза). Без предлога - форма из `TECH_TERMS`.
+_TERM_CASES = {
+    "fact_claims": ("проверенных фактах", "проверенных фактов", "проверенным фактам"),
+    "fact_claim": ("проверенном факте", "проверенного факта", "проверенному факту"),
+    "source_id": ("источнике", "источника", "источнику"),
+    "fragment_id": ("фрагменте источника", "фрагмента источника", "фрагменту источника"),
+    "teacher_notes": ("заметках для педагога", "заметок для педагога", "заметкам для педагога"),
+}
+# Предлоги предложного, родительного и дательного падежа; «на» и «с» не берутся: падеж по ним не определить.
+_TERM_PREPOSITIONS = (
+    re.compile(r"(?:^|[\s(«\"])(?:в|во|(?P<o>о)|об|при)\s+$", re.I),
+    re.compile(r"(?:^|[\s(«\"])(?:из|для|без|до|от|у|из-за|кроме|вместо)\s+$", re.I),
+    re.compile(r"(?:^|[\s(«\"])(?:по|к|ко|согласно)\s+$", re.I),
+)
+
+
+def _term_form(key: str | None, title: str, before: str) -> tuple[str, str]:
+    """Служебное поле, упомянутое как слово, - в падеже по предлогу перед ним («о» перед гласной - «об»).
+
+    Возвращает текст перед словом и само слово; не служебное поле - без изменений.
+    """
+    if key not in _TERM_CASES or title != TECH_TERMS.get(key):
+        return before, title
+    for forms_index, preposition in enumerate(_TERM_PREPOSITIONS):
+        found = preposition.search(before)
+        if found:
+            form = _TERM_CASES[key][forms_index]
+            if found.groupdict().get("o") and form[0] in "аеёиоуыэюя":
+                at = found.start("o")
+                before = before[:at] + before[at] + "б" + before[at + 1:]
+            return before, form
+    return before, title
 
 
 def build_names(variant: dict[str, Any], dependencies: dict[str, dict[str, Any]] | None = None,
@@ -275,6 +308,7 @@ def humanize_text(text: str, names: dict[str, str], matched: dict[str, str] | No
                 # «(карточки card_task)» -> «(«Карточки заданий»)»: слово из скобки повторяет название.
                 # Слова перед ним остаются: «(раздаёт странички commitment_book_pages)» -> «(раздаёт «Странички…»)».
                 before = before[:open_paren.start()] + "(" + "".join(word + " " for word in words[:same])
+        before, title = _term_form(key, title, before)
         out.append(before)
         out.append(title)
         pos = end

@@ -204,6 +204,16 @@ _ONLINE_TASK = re.compile(
 
 # Век: «в XVII веке», «XIX века», «в 17 веке», «18-го века».
 _CENTURY = re.compile(r"\b(?:[IVX]{1,5}|\d{1,2}(?:-?(?:м|ом|го|ого))?)\s+век(?:а|е|ом|ах|ов|и)?\b")
+
+
+def title_dates(titles: str) -> tuple[set[str], set[tuple[int, int]]]:
+    """Годы и дни (день, месяц) из названий источников: «от 23.09.2008» -> {"2008"}, {(23, 9)}."""
+    years = {m.group(0) for m in _YEAR.finditer(titles)}
+    days = {_day_month(m.group(0)) for m in _DATE.finditer(titles)}
+    days |= {(int(d), int(mo)) for d, mo in re.findall(r"(?<!\d)(\d{1,2})\.(\d{1,2})\.\d{4}", titles) if 1 <= int(mo) <= 12}
+    return years, {day for day in days if day}
+
+
 def event_days(rule: dict) -> set[tuple[int, int]]:
     """Дни самого события из карточки каталога как (день, месяц), в любой записи: «7 января» в пояснении,
     «31.12 – 08.01» в пояснении, «12-31» в фиксированной дате. Дата документа («от 08.09.2016») - не день события.
@@ -498,20 +508,28 @@ def validate_variant(v: dict[str, Any], n: NormalizedRequest, catalog: Catalog, 
             add("FACT-SOURCE", "critical", loc, f"Утверждение без проверенного фрагмента: «{c['text']}»", "blocks")
     texts = [(f"timeline.{b['block_id']}", b["teacher_script"] + " " + " ".join(b["pupil_actions"])) for b in timeline]
     texts += [(f"materials.{m['material_id']}", m["content"]) for m in materials]
+    fragments = catalog.verified_fragments(n.event_id, n.region_id, n.cultural_context)
+    sources_text = " ".join(str(f.get("quote") or f.get("text") or f.get("text_excerpt") or "") for f in fragments).lower()
+    # Названия источников фрагментов: документ «Указ Губернатора Свердловской области от 23.09.2008 № 1022-УГ».
+    catalog_sources = getattr(catalog, "sources", None) or {}
+    source_titles = " ".join(str((catalog_sources.get(f.get("source_id")) or {}).get("title") or "") for f in fragments)
     claimed = " ".join(c["text"] for c in claims)
-    # Дата самого события из карточки каталога («7 января» для Рождества) - не новый факт.
+    # Дата самого события из карточки каталога («7 января» для Рождества) - не новый факт. Год и дата из названия
+    # источника события - тоже: «указом губернатора (№ 1022-УГ от 23 сентября 2008 года)» (второй финальный
+    # прогон 15.11) пересказывает название источника, а не добавляет факт.
     card_dates = event_days((catalog.events.get(n.event_id) or {}).get("date_rule") or {})
+    title_years, title_days = title_dates(source_titles)
     for loc, text in texts:
         for match in list(_YEAR.finditer(text)) + list(_DATE.finditer(text)) + list(_CENTURY.finditer(text)):
             token = match.group(0)
+            if token in title_years or _day_month(token) in title_days:
+                continue
             if token not in claimed and _day_month(token) not in card_dates:
                 add("FACT-UNREGISTERED", "warning", loc, f"Дата, год или век «{token}» не зарегистрирован в fact_claims", "blocks")
                 break
 
     # Традиции стран и народов, которых нет в проверенных фрагментах события: предупреждение эксперту.
     # Проверяется каждое утверждение: фрагмент о дате праздника не подтверждает традиции другой страны.
-    fragments = catalog.verified_fragments(n.event_id, n.region_id, n.cultural_context)
-    sources_text = " ".join(str(f.get("quote") or f.get("text") or f.get("text_excerpt") or "") for f in fragments).lower()
     for loc, text in texts:
         for quote, places in _culture_claims(text):
             if _confirmed(places, sources_text):
@@ -526,8 +544,6 @@ def validate_variant(v: dict[str, Any], n: NormalizedRequest, catalog: Catalog, 
     # Документ подтверждает и название источника фрагмента: цитата «День образования Свердловской области -
     # 17 января» взята из «Указа Губернатора Свердловской области № 1022-УГ», хотя слова «указ» в ней нет
     # (ложное предупреждение в прогоне 15.11).
-    catalog_sources = getattr(catalog, "sources", None) or {}
-    source_titles = " ".join(str((catalog_sources.get(f.get("source_id")) or {}).get("title") or "") for f in fragments)
     documents_text = (sources_text + " " + source_titles.lower()).strip()
     for loc, text in texts:
         for sentence, stem in document_mentions(text):
