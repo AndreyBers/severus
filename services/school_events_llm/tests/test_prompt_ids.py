@@ -96,6 +96,33 @@ class ComposedPromptsTest(unittest.TestCase):
             self.assertIn('"teacher_instructions": ["Подготовьте «', prompt)
 
 
+class PromptRulesTest(unittest.TestCase):
+    def test_rules_from_final_runs(self):
+        """Четыре финальных прогона 15.11 (99 вариантов): модель копировала образец «teacher | pupil | …» в `audience`,
+        писала механики ценностей в `activity_type`, брала даты из своих знаний (Гагарин 1961, указ 1699, «2023 год»
+        в шаблоне) и ссылалась в блоках на роли, которых нет в `roles` (4 повторных вызова плана)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = Path(tmp) / "run"
+            trace = RunTrace(run_dir, full_prompts=True, full_responses=False, secrets=[])
+            Generator(settings(), catalog(), FixtureLLM([golden("ex1_knowledge_day")]), trace=trace).run(request("ex1_knowledge_day"))
+            prompts: dict[str, list[str]] = {}
+            for call in sorted((run_dir / "calls").iterdir()):
+                stage = json.loads((call / "manifest.json").read_text(encoding="utf-8"))["stage"]
+                prompts.setdefault(stage, []).append((call / "prompt.md").read_text(encoding="utf-8"))
+        self.assertIn("Названия механик ценностей в `activity_type` не пиши", prompts["variation_plan"][0])
+        plan = prompts["scenario_plan"][0]
+        self.assertIn('"mode": "small_groups"', plan)
+        self.assertNotIn("whole_class | pairs", plan)
+        self.assertIn("каждый ID из `role_ids` блоков объявлен в `roles`", plan)
+        for block in prompts["scenario_block"]:
+            self.assertIn("если во фрагментах даты нет, спроси без даты", block)
+        materials = prompts["materials"][0]
+        self.assertIn('"audience": "pupil"', materials)
+        self.assertNotIn("teacher | pupil", materials)
+        self.assertIn("если во фрагментах даты нет, спроси без даты", materials)
+        self.assertIn("оставь место «20__»", materials)
+
+
 class FieldNameAsWordTest(unittest.TestCase):
     def test_fact_claims_in_notes(self):
         """Прогон 15.11 после правки промптов: ID материалов в ответах модели - ни одного, но в памятке к материалу
