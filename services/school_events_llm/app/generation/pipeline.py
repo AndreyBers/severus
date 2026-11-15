@@ -34,7 +34,7 @@ from ..trace import RunTrace
 from ..usage import TokenTally
 from ..validation.checks import FAMILY_ALTERNATIVE, Issue, diversity_issues, report_status, validate_variant
 from .grouping import compute_grouping, describe
-from .humanize import blank_template_dates, drop_meta_notes, humanize_variant
+from .humanize import MATERIAL_TYPE_TITLES, blank_template_dates, drop_meta_notes, humanize_variant
 from .plan_fixes import fallback_material, fix_parent_role_counts, fix_plan_for_request, fix_type_by_id, fix_vote_quiz
 from .source_refs import move_source_refs, register_fragment_facts
 from .ids import normalize_dependencies, normalize_ids, normalize_material_fields
@@ -830,9 +830,25 @@ class Generator:
         return "\n".join(lines)
 
     @staticmethod
-    def plan_text(plan: dict, grid: list[tuple[int, int]], grouping: tuple[str, list[int]], focus_block: str | None = None,
+    def material_title(material: dict) -> str:
+        """Название материала плана в ёлочках, как его увидит педагог; без названия - по типу («рабочий лист»)."""
+        title = str(material.get("title") or "").strip().strip("«»")
+        return f"«{title}»" if title else f"«{MATERIAL_TYPE_TITLES.get(material.get('type'), 'материал').capitalize()}»"
+
+    @classmethod
+    def material_titles(cls, plan: dict) -> dict[str, str]:
+        return {m["material_id"]: cls.material_title(m) for m in plan.get("planned_materials") or []}
+
+    @classmethod
+    def plan_text(cls, plan: dict, grid: list[tuple[int, int]], grouping: tuple[str, list[int]], focus_block: str | None = None,
                   previous_excerpt: str | None = None, script_chars: Any = None) -> str:
         """Формирует текстовое представление утверждённого плана, рассчитанного тайминга и группировки.
+
+        Материалы и этапы в плане названы по-русски, без ID (прогон 15.11): когда в строке блока стояло
+        «материалы: recipe_cards ← ТЕКУЩИЙ БЛОК», модель так и писала в реплике «(раздаёт `recipe_cards`)».
+        Материалы блоков программа берёт из плана сама, этапу блоков их ID не нужны; этапу материалов
+        ID даются только в формате ответа (`planned_materials_list`). Остаётся `block_id` в начале строки
+        блока: по нему этап нескольких блоков возвращает ответ.
 
         Параметры:
             `plan`, `grid`, `grouping`, `focus_block`, `previous_excerpt`;
@@ -842,9 +858,15 @@ class Generator:
             str.
         """
         mode, sizes = grouping
+        titles = cls.material_titles(plan)
+        block_titles = {b["block_id"]: f"«{b['title']}»" for b in plan["blocks"]}
+
+        def stages(ids: list[str]) -> str:
+            return ", ".join(block_titles.get(bid, bid) for bid in ids) or "-"
+
         lines = [f"## Вход этапа: утверждённый план варианта {plan['variant_id']} «{plan['title']}»",
                  f"Концепция: {plan['concept']['summary']}", f"Цель: {plan['concept']['goal']}",
-                 f"Деление учащихся ({mode}): {describe(sizes)}; блоки: {', '.join(plan['grouping_request'].get('block_ids', [])) or '-'}",
+                 f"Деление учащихся ({mode}): {describe(sizes)}; этапы: {stages(plan['grouping_request'].get('block_ids', []))}",
                  "", "Роли:"]
         for r in plan["roles"]:
             mode_txt = f", режим {r['role_mode']}" if r.get("role_mode") else ""
@@ -853,45 +875,63 @@ class Generator:
         for b, (start, dur) in zip(plan["blocks"], grid):
             mark = "  ← ТЕКУЩИЙ БЛОК" if focus_block == b["block_id"] else ""
             size = f" | реплики педагога: {script_chars(dur)}" if script_chars else ""
+            mats = ", ".join(titles.get(mid, mid) for mid in b["planned_material_ids"]) or "-"
             lines.append(f"- `{b['block_id']}` | {start}–{start + dur} мин ({dur}) | {b['title']} | цель: {b['purpose']} | "
-                         f"роли: {', '.join(b['role_ids'])} | материалы: {', '.join(b['planned_material_ids']) or '-'}{size}{mark}")
+                         f"роли: {', '.join(b['role_ids'])} | материалы: {mats}{size}{mark}")
         lines.append("\nЦенности → механики:")
         for vm in plan["concept"]["values_to_mechanics"]:
-            lines.append(f"- {vm['value_id']} ({vm['mechanic_type']}): {vm['mechanic']} - блоки {', '.join(vm.get('block_ids', []))}")
+            lines.append(f"- {vm['value_id']} ({vm['mechanic_type']}): {vm['mechanic']} - этапы: {stages(vm.get('block_ids', []))}")
         if plan.get("planned_materials"):
-            lines.append("\nМатериалы (тексты создаются на следующем этапе; в репликах и действиях называй их по названию, не по ID):")
+            lines.append("\nМатериалы (в репликах, действиях и памятке называй их так, в ёлочках):")
             for m in plan["planned_materials"]:
-                title = f" «{m['title'].strip('«»')}»" if m.get("title") else ""
-                lines.append(f"- `{m['material_id']}`{title} - {m['type']} - {m['purpose']}")
+                lines.append(f"- {titles[m['material_id']]} - {MATERIAL_TYPE_TITLES.get(m['type'], m['type'])} - {m['purpose']}")
         if previous_excerpt:
             lines.append(f"\nКонец предыдущего блока (для связности): «{previous_excerpt}»")
         return "\n".join(lines)
 
-    @staticmethod
-    def planned_materials_list(plan: dict) -> str:
-        """Список материалов плана для формата ответа этапа materials: ID и тип, которые нельзя менять."""
+    @classmethod
+    def planned_materials_list(cls, plan: dict) -> str:
+        """Список материалов плана для формата ответа этапа materials: название, затем ID и тип, которые нельзя менять.
+
+        Название первым, ID - значением поля: при записи «`worksheet_plans` (worksheet, название «Листы»)» модель
+        писала в памятке «Распечатайте листы планирования (worksheet_plans)» (прогон 15.11).
+        """
         items = plan.get("planned_materials") or []
         if not items:
             return "в плане материалов нет; создавай материал, только если без него блок невыполним"
-        return ", ".join(f"`{m['material_id']}` ({m['type']}" + (f", название «{m['title'].strip('«»')}»" if m.get("title") else "") + ")"
-                         for m in items)
+        return "; ".join(f"{cls.material_title(m)} - `material_id`: `{m['material_id']}`, `type`: `{m['type']}`" for m in items)
+
+    @classmethod
+    def materials_hint(cls, plan: dict, block: dict) -> str:
+        """Подсказка к образцу реплики: как назвать материал этого блока, например: (раздаёт «Карты рецептов»)."""
+        titles = cls.material_titles(plan)
+        mats = [titles[mid] for mid in block.get("planned_material_ids") or [] if mid in titles]
+        return f"; материал называй по названию, например: (раздаёт {mats[0]})" if mats else ""
+
+    @classmethod
+    def instruction_example(cls, plan: dict) -> str:
+        """Образец первого пункта памятки с настоящим названием материала из плана, без ID."""
+        items = plan.get("planned_materials") or []
+        return f"Подготовьте {cls.material_title(items[0])} заранее" if items else "Что подготовить заранее"
 
     @staticmethod
-    def blocks_text(blocks: list[dict]) -> str:
+    def blocks_text(blocks: list[dict], titles: dict[str, str] | None = None) -> str:
         """Формирует компактный контекст уже готовых сценарных блоков для генерации материалов.
 
         Параметры:
-            `blocks`.
+            `blocks`; `titles` - названия материалов по ID (материалы показываются названиями, а не ID).
 
         Возвращает:
             str.
         """
+        titles = titles or {}
         lines = ["\n## Готовый сценарий блоков (кратко)"]
         for b in blocks:
             script = b["teacher_script"]
             excerpt = script if len(script) <= 700 else script[:700] + "…"
+            mats = ", ".join(titles.get(mid, mid) for mid in b["material_ids"]) or "-"
             lines.append(f"### `{b['block_id']}` {b['title']} ({b['start_minute']}–{b['start_minute'] + b['duration_minutes']} мин)\n"
-                         f"Действия учеников: {'; '.join(b['pupil_actions'])}\nМатериалы: {', '.join(b['material_ids']) or '-'}\n"
+                         f"Действия учеников: {'; '.join(b['pupil_actions'])}\nМатериалы: {mats}\n"
                          f"Сценарий (фрагмент): {excerpt}")
         return "\n".join(lines)
 
@@ -1029,7 +1069,8 @@ class Generator:
                     for b, (start, dur) in zip(plan["blocks"], grid):
                         res = self.call_stage("scenario_block", n,
                                               stage_input=self.plan_text(plan, grid, (g_mode, sizes), b["block_id"], prev, script_chars),
-                                              output_vars={"variant_id": vid, "block_id": b["block_id"], "start_minute": str(start), "block_minutes": str(dur)},
+                                              output_vars={"variant_id": vid, "block_id": b["block_id"], "start_minute": str(start), "block_minutes": str(dur),
+                                                           "materials_hint": self.materials_hint(plan, b)},
                                               meta={**vmeta, "block_id": b["block_id"]}, variant_id=vid, repair=rep_all)
                         block_details[b["block_id"]] = res.model.block.model_dump()
                         block_raw[b["block_id"]] = res.raw
@@ -1069,8 +1110,10 @@ class Generator:
 
             # Генерация и проверка материалов.
             if mat_res is None:
-                mat_res = self.call_stage("materials", n, stage_input=self.plan_text(plan, grid, (g_mode, sizes)) + self.blocks_text(timeline),
-                                          output_vars={"variant_id": vid, "planned_materials_list": self.planned_materials_list(plan)},
+                mat_res = self.call_stage("materials", n, stage_input=self.plan_text(plan, grid, (g_mode, sizes))
+                                          + self.blocks_text(timeline, self.material_titles(plan)),
+                                          output_vars={"variant_id": vid, "planned_materials_list": self.planned_materials_list(plan),
+                                                       "instruction_example": self.instruction_example(plan)},
                                           meta=vmeta, variant_id=vid, repair=repair_for.pop("materials", None))
             mat = mat_res.model
             renamed = reconcile_material_ids(plan.get("planned_materials", []), mat.materials)
