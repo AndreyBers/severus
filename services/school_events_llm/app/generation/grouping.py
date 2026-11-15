@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import math
+import re
+
 
 def split_even(total: int, groups: int) -> list[int]:
     """27 на 5 → [6, 6, 5, 5, 5]: размеры отличаются не больше чем на 1, крупные первыми."""
@@ -62,3 +65,41 @@ def describe(sizes: list[int]) -> str:
         pairs = len(sizes) - (1 if sizes[-1] == 3 else 0)
         return f"{pairs} {plural(pairs, 'пара', 'пары', 'пар')}{tail}"
     return f"{len(sizes)} {plural(len(sizes), 'группа', 'группы', 'групп')}: " + ", ".join(str(s) for s in sizes)
+
+
+# Какие блоки получают строку про выступления: по названию и цели блока плана.
+_PRESENT = re.compile(r"выступ|презент|представ|защит|инсцен|ярмарк|показ", re.I)
+_GROUP_WORK = re.compile(r"групп|команд|\bпар(?:а|ы|ах|ами|у)?\b|в парах|станци|совместн|мастерск", re.I)
+_ORGANIZE = re.compile(r"формирован|организац|делени|распредел|выбор|знакомств|приветств|вступлен|введени|объяснени|рефлекс|итог|заверш"
+                       r"|(?:создани|сбор)\w*\s+(?:команд|групп)", re.I)
+
+
+def presentation_budget(mode: str, sizes: list[int], block: dict, minutes: int, grouping_block_ids: list[str],
+                        next_block: dict | None = None) -> str:
+    """Минуты на выступление каждой группы или пары для строки блока в промпте; не тот блок - пустая строка.
+
+    Четыре финальных прогона и два прогона с правкой промптов 15.11: настоящие INNER-TIMING - все «12 пар по
+    3 минуты в блоке на 20 минут», «6 минут работы и выступления 4 групп в 8 минутах». Общее правило «число
+    выступающих × минуты не больше длительности» модель сама не считает, поэтому числа даёт программа.
+    Только числа, без готовых решений («по желанию»): образец с одним значением модель копирует.
+
+    Строку получают блоки выступлений («Представление проектов») и блоки работы групп или пар, после которых
+    нет блока выступлений. Не получают: организационные блоки (формирование команд, приветствие, итоги),
+    блоки короче 4 минут и работа групп перед блоком выступлений - чтобы модель не добавляла туда выступления.
+    """
+    if mode == "whole_class" or len(sizes) < 2 or minutes < 4:
+        return ""
+    text = f"{block.get('title') or ''} {block.get('purpose') or ''}"
+    if _ORGANIZE.search(str(block.get("title") or "")):
+        return ""
+    presents_next = bool(next_block) and bool(_PRESENT.search(f"{next_block.get('title') or ''} {next_block.get('purpose') or ''}"))
+    group_work = block.get("block_id") in grouping_block_ids or bool(_GROUP_WORK.search(text))
+    if not _PRESENT.search(text) and not (group_work and not presents_next):
+        return ""
+    units = len(sizes)
+    who = f"всех {units} {plural(units, 'пары', 'пар', 'пар') if mode == 'pairs' else plural(units, 'группы', 'групп', 'групп')}"
+    per = math.floor((minutes - 1) / units * 2) / 2
+    if per < 1:
+        return f"выступления {who}: меньше 1 мин на каждую - все за {minutes} мин не успеют"
+    per_txt = str(int(per)) if per == int(per) else str(per).replace(".", ",")
+    return f"выступления {who}: не больше {per_txt} мин на каждую; работа до них тоже входит в {minutes} мин"

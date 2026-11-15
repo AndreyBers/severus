@@ -33,7 +33,7 @@ from ..settings import Settings, sha256_file
 from ..trace import RunTrace
 from ..usage import TokenTally
 from ..validation.checks import FAMILY_ALTERNATIVE, Issue, diversity_issues, report_status, validate_variant
-from .grouping import compute_grouping, describe
+from .grouping import compute_grouping, describe, presentation_budget
 from .lenient import fix_output
 from .humanize import MATERIAL_TYPE_TITLES, blank_template_dates, drop_meta_notes, humanize_variant
 from .plan_fixes import (declare_parent_roles, fallback_material, fix_parent_role_counts, fix_plan_for_request,
@@ -862,7 +862,7 @@ class Generator:
 
     @classmethod
     def plan_text(cls, plan: dict, grid: list[tuple[int, int]], grouping: tuple[str, list[int]], focus_block: str | None = None,
-                  previous_excerpt: str | None = None, script_chars: Any = None) -> str:
+                  previous_excerpt: str | None = None, script_chars: Any = None, timing_hints: bool = False) -> str:
         """Формирует текстовое представление утверждённого плана, рассчитанного тайминга и группировки.
 
         Материалы и этапы в плане названы по-русски, без ID (прогон 15.11): когда в строке блока стояло
@@ -873,7 +873,9 @@ class Generator:
 
         Параметры:
             `plan`, `grid`, `grouping`, `focus_block`, `previous_excerpt`;
-            `script_chars` - функция «минуты -> текст про нужный объём реплик», для этапов блоков.
+            `script_chars` - функция «минуты -> текст про нужный объём реплик», для этапов блоков;
+            `timing_hints` - минуты на выступление каждой группы или пары в строке группового блока
+            (`block_timing_hints` в `config/generation.json`, только этапы блоков).
 
         Возвращает:
             str.
@@ -893,12 +895,15 @@ class Generator:
             mode_txt = f", режим {r['role_mode']}" if r.get("role_mode") else ""
             lines.append(f"- `{r['role_id']}` - {r['title']} ({r['participant_type']}{mode_txt}), человек: {r['count']}")
         lines.append("\nБлоки (время утверждено программой - не менять):")
-        for b, (start, dur) in zip(plan["blocks"], grid):
+        for index, (b, (start, dur)) in enumerate(zip(plan["blocks"], grid)):
             mark = "  ← ТЕКУЩИЙ БЛОК" if focus_block == b["block_id"] else ""
             size = f" | реплики педагога: {script_chars(dur)}" if script_chars else ""
             mats = ", ".join(titles.get(mid, mid) for mid in b["planned_material_ids"]) or "-"
+            following = plan["blocks"][index + 1] if index + 1 < len(plan["blocks"]) else None
+            budget = presentation_budget(mode, sizes, b, dur, plan["grouping_request"].get("block_ids", []), following) if timing_hints else ""
+            budget = f" | {budget}" if budget else ""
             lines.append(f"- `{b['block_id']}` | {start}–{start + dur} мин ({dur}) | {b['title']} | цель: {b['purpose']} | "
-                         f"роли: {', '.join(b['role_ids'])} | материалы: {mats}{size}{mark}")
+                         f"роли: {', '.join(b['role_ids'])} | материалы: {mats}{size}{budget}{mark}")
         lines.append("\nЦенности → механики:")
         for vm in plan["concept"]["values_to_mechanics"]:
             lines.append(f"- {vm['value_id']} ({vm['mechanic_type']}): {vm['mechanic']} - этапы: {stages(vm.get('block_ids', []))}")
@@ -1044,6 +1049,7 @@ class Generator:
         min_block = int(self.defaults.get("min_block_minutes", 2))
         detail = n.teacher_preferences["script_detail"]
         script_chars = lambda minutes: script_size_text(self.cfg, detail, minutes, n.age_group)  # noqa: E731
+        timing_hints = bool(self.defaults.get("block_timing_hints", False))
         per_block_mode = self.defaults.get("block_detail_mode", "auto")
         per_block = per_block_mode == "per_block" or (per_block_mode == "auto" and n.duration_minutes >= int(self.defaults.get("per_block_from_minutes", 60)))
         vmeta = {**meta, "variant_id": vid}
@@ -1079,7 +1085,8 @@ class Generator:
             # Генерация и проверка сценарных блоков.
             if blocks_res is None:
                 if not per_block:
-                    res = self.call_stage("scenario_blocks", n, stage_input=self.plan_text(plan, grid, (g_mode, sizes), script_chars=script_chars),
+                    res = self.call_stage("scenario_blocks", n, stage_input=self.plan_text(plan, grid, (g_mode, sizes), script_chars=script_chars,
+                                                                                           timing_hints=timing_hints),
                                           output_vars={"variant_id": vid}, meta=vmeta, variant_id=vid, repair=repair_for.pop("blocks", None),
                                           plan=plan)
                     block_details = {b.block_id: b.model_dump() for b in res.model.blocks}
@@ -1090,7 +1097,7 @@ class Generator:
                     rep_all = repair_for.pop("blocks", None)
                     for b, (start, dur) in zip(plan["blocks"], grid):
                         res = self.call_stage("scenario_block", n,
-                                              stage_input=self.plan_text(plan, grid, (g_mode, sizes), b["block_id"], prev, script_chars),
+                                              stage_input=self.plan_text(plan, grid, (g_mode, sizes), b["block_id"], prev, script_chars, timing_hints),
                                               output_vars={"variant_id": vid, "block_id": b["block_id"], "start_minute": str(start), "block_minutes": str(dur),
                                                            "materials_hint": self.materials_hint(plan, b)},
                                               meta={**vmeta, "block_id": b["block_id"]}, variant_id=vid, repair=rep_all, plan=plan)

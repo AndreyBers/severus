@@ -22,6 +22,8 @@ from pydantic import ValidationError
 
 from app.contracts.llm import STAGE_MODELS
 from app.generation.dates import YEAR
+from app.generation.grouping import presentation_budget
+from app.generation.pipeline import Generator
 from app.generation.humanize import blank_template_dates
 from app.generation.ids import normalize_dependencies, untranslated_things
 from app.generation.plan_fixes import declare_parent_roles
@@ -156,6 +158,50 @@ class ParentRolesTest(unittest.TestCase):
         plan["blocks"][0]["role_ids"].append("guest_star")
         declare_parent_roles(plan, True, ["helper", "audience"], 5, [])
         self.assertNotIn("guest_star", {r["role_id"] for r in plan["roles"]})
+
+
+class PresentationBudgetTest(unittest.TestCase):
+    """Минуты на выступления в строке блока промпта (`block_timing_hints`)."""
+
+    def test_numbers(self):
+        groups = [6, 6, 6, 6]
+        self.assertEqual(presentation_budget("small_groups", groups, {"block_id": "block_03", "title": "Станция Ремёсел"}, 8,
+                                             ["block_03", "block_04"], {"title": "Станция Сказок"}),
+                         "выступления всех 4 групп: не больше 1,5 мин на каждую; работа до них тоже входит в 8 мин")
+        self.assertEqual(presentation_budget("pairs", [2] * 12 + [3], {"block_id": "block_03", "title": "Декорирование писем в парах"}, 15,
+                                             ["block_03"], {"title": "Подведение итогов"}),
+                         "выступления всех 13 пар: не больше 1 мин на каждую; работа до них тоже входит в 15 мин")
+        self.assertEqual(presentation_budget("pairs", [2] * 10, {"block_id": "block_04", "title": "Микропрезентации"}, 7, []),
+                         "выступления всех 10 пар: меньше 1 мин на каждую - все за 7 мин не успеют")
+        self.assertEqual(presentation_budget("small_groups", [5] * 21, {"block_id": "block_04", "title": "Выступления команд"}, 45, []),
+                         "выступления всех 21 группы: не больше 2 мин на каждую; работа до них тоже входит в 45 мин")
+
+    def test_blocks_without_line(self):
+        """Не групповой режим, организационные и короткие блоки, работа групп перед блоком выступлений."""
+        groups = [6, 6, 6, 6]
+        cases = [("whole_class", [24], {"block_id": "block_03", "title": "Представление работ"}, 10, None),
+                 ("small_groups", groups, {"block_id": "block_02", "title": "Формирование команд"}, 5, None),
+                 ("small_groups", groups, {"block_id": "block_02", "title": "Создание команд"}, 5, None),
+                 ("small_groups", groups, {"block_id": "block_06", "title": "Подведение итогов и рефлексия"}, 8, None),
+                 ("small_groups", groups, {"block_id": "block_03", "title": "Представление работ"}, 3, None),
+                 ("small_groups", groups, {"block_id": "block_02", "title": "Творческая мастерская"}, 15, {"title": "Представление работ"}),
+                 ("small_groups", groups, {"block_id": "block_01", "title": "Рассказ учителя", "purpose": "знакомство с праздником"}, 10, None)]
+        for mode, sizes, block, minutes, following in cases:
+            with self.subTest(title=block["title"], mode=mode):
+                self.assertEqual(presentation_budget(mode, sizes, block, minutes, ["block_02"], following), "")
+
+    def test_flag_off_keeps_prompt(self):
+        plan = {"variant_id": "v1", "title": "T", "concept": {"summary": "s", "goal": "g", "values_to_mechanics": []},
+                "grouping_request": {"mode": "small_groups", "groups_count": 4, "block_ids": ["block_02"]},
+                "roles": [], "planned_materials": [],
+                "blocks": [{"block_id": "block_01", "title": "Приветствие", "purpose": "начало", "role_ids": [], "planned_material_ids": []},
+                           {"block_id": "block_02", "title": "Работа в группах", "purpose": "проект", "role_ids": [], "planned_material_ids": []}]}
+        grid = [(0, 5), (5, 25)]
+        off = Generator.plan_text(plan, grid, ("small_groups", [6, 6, 6, 6]), "block_02", None, lambda m: "около 500 символов")
+        on = Generator.plan_text(plan, grid, ("small_groups", [6, 6, 6, 6]), "block_02", None, lambda m: "около 500 символов", True)
+        changed = [(a, b) for a, b in zip(off.split("\n"), on.split("\n")) if a != b]
+        self.assertEqual(len(changed), 1)
+        self.assertIn("| выступления всех 4 групп: не больше 6 мин на каждую; работа до них тоже входит в 25 мин  ← ТЕКУЩИЙ БЛОК", changed[0][1])
 
 
 class InnerTimingTest(unittest.TestCase):
