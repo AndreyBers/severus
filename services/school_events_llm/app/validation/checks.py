@@ -205,6 +205,29 @@ _ONLINE_TASK = re.compile(
 # Век: «в XVII веке», «XIX века», «в 17 веке», «18-го века».
 _CENTURY = re.compile(r"\b(?:[IVX]{1,5}|\d{1,2}(?:-?(?:м|ом|го|ого))?)\s+век(?:а|е|ом|ах|ов|и)?\b")
 _DATE = re.compile(r"\b\d{1,2}\s+(января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря)\b", re.I)
+_MONTHS_GEN = ("января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря")
+
+
+def _day_month(token: str) -> tuple[int, int] | None:
+    """«31 декабря» -> (31, 12); не дата - None."""
+    m = re.fullmatch(r"(\d{1,2})\s+(\w+)", token.strip().lower())
+    return (int(m.group(1)), _MONTHS_GEN.index(m.group(2)) + 1) if m and m.group(2) in _MONTHS_GEN else None
+
+
+def event_days(rule: dict) -> set[tuple[int, int]]:
+    """Дни самого события из карточки каталога как (день, месяц), в любой записи: «7 января» в пояснении,
+    «31.12 – 08.01» в пояснении, «12-31» в фиксированной дате. Дата документа («от 08.09.2016») - не день события.
+
+    Прогон 15.11: «вечером 31 декабря» давало FACT-UNREGISTERED, потому что в карточке Нового года дата
+    записана цифрами («12-31», «31.12»), а сравнивалась строка «31 декабря».
+    """
+    note = str(rule.get("note") or "")
+    days = {_day_month(m.group(0)) for m in _DATE.finditer(note)}
+    days |= {(int(d), int(mo)) for d, mo in re.findall(r"(?<![\d.])(\d{1,2})\.(\d{1,2})(?![\d.])", note) if 1 <= int(mo) <= 12}
+    fixed = re.fullmatch(r"(\d{1,2})-(\d{1,2})", str(rule.get("value") or "")) if rule.get("type") == "fixed" else None
+    if fixed:
+        days.add((int(fixed.group(2)), int(fixed.group(1))))
+    return {day for day in days if day}
 
 
 # Признаки равноценной альтернативы в задании семье: модели формулируют её по-разному
@@ -487,12 +510,11 @@ def validate_variant(v: dict[str, Any], n: NormalizedRequest, catalog: Catalog, 
     texts += [(f"materials.{m['material_id']}", m["content"]) for m in materials]
     claimed = " ".join(c["text"] for c in claims)
     # Дата самого события из карточки каталога («7 января» для Рождества) - не новый факт.
-    rule = (catalog.events.get(n.event_id) or {}).get("date_rule") or {}
-    card_dates = {m.group(0).lower() for m in _DATE.finditer(str(rule.get("note") or ""))}
+    card_dates = event_days((catalog.events.get(n.event_id) or {}).get("date_rule") or {})
     for loc, text in texts:
         for match in list(_YEAR.finditer(text)) + list(_DATE.finditer(text)) + list(_CENTURY.finditer(text)):
             token = match.group(0)
-            if token not in claimed and token.lower() not in card_dates:
+            if token not in claimed and _day_month(token) not in card_dates:
                 add("FACT-UNREGISTERED", "warning", loc, f"Дата, год или век «{token}» не зарегистрирован в fact_claims", "blocks")
                 break
 
