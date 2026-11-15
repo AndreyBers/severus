@@ -16,6 +16,8 @@
 4. Значение не из списка допустимых: «teacher | pupils_group» (строка из образца) - первый допустимый вариант,
    «pupils_all» - вариант с тем же первым словом («pupils_group»), если он один.
 5. Из плана: `role_ids` блока, `used_in_blocks` материала; `purpose` блока или материала - его название.
+6. Второй прогон 3 Pro 15.11 (19 вариантов из 25): `print_required` материала - по расходникам (печатать, если
+   в `dependencies` есть принтер); ID роли с опечаткой в блоке плана (`pups_all`) - объявленная роль (`pupils_all`).
 
 У профилей без флага (GigaChat-2-Max и другие) ничего из этого не вызывается: их работа не меняется.
 """
@@ -60,7 +62,8 @@ def _same_key(unknown: str, field: str) -> bool:
         return True
     latin = re.match(r"[A-Za-z_]+", unknown)
     prefix = _LETTERS.sub("", latin.group(0).lower()) if latin and latin.end() < len(unknown) else ""
-    return len(prefix) >= 6 and f.startswith(prefix) and len(prefix) >= 0.6 * len(f)
+    # Латинское начало перед русскими буквами - хотя бы половина имени: «used_in блоков», «values_to_mechanики».
+    return len(prefix) >= 6 and f.startswith(prefix) and len(prefix) >= 0.5 * len(f)
 
 
 def _model_of(annotation: Any) -> type[BaseModel] | None:
@@ -179,7 +182,15 @@ def fix_output(stage: str, data: Any, model: type[BaseModel], *, plan: dict | No
     _fix_dict(data, model, "", fixes)
     # 5. Поля, которые программа знает из плана.
     if stage == "scenario_plan":
+        declared = [r.get("role_id") for r in data.get("roles") or [] if isinstance(r, dict) and r.get("role_id")]
         for index, block in enumerate(data.get("blocks") or []):
+            if isinstance(block, dict) and isinstance(block.get("role_ids"), list):
+                for pos, role in enumerate(block["role_ids"]):
+                    if isinstance(role, str) and role not in declared:
+                        same = [d for d in declared if _same_key(role, d)]
+                        if len(same) == 1:
+                            block["role_ids"][pos] = same[0]
+                            fixes.append({"kind": "ref_fixed", "path": f"blocks[{index}].role_ids", "from": role, "to": same[0]})
             if isinstance(block, dict) and "purpose" not in block and block.get("title"):
                 block["purpose"] = block["title"]
                 fixes.append({"kind": "filled", "path": f"blocks[{index}].purpose", "from": "title"})
@@ -196,6 +207,10 @@ def fix_output(stage: str, data: Any, model: type[BaseModel], *, plan: dict | No
             fixes.append({"kind": "filled", "path": f"block {block.get('block_id') or block_id}.role_ids", "from": "plan"})
     if stage == "materials":
         for material in data.get("materials") or []:
+            if isinstance(material, dict) and "print_required" not in material:
+                material["print_required"] = "printer" in (material.get("dependencies") or [])
+                fixes.append({"kind": "filled", "path": f"materials.{material.get('material_id')}.print_required",
+                              "from": "dependencies"})
             if isinstance(material, dict) and not material.get("used_in_blocks"):
                 used = [b["block_id"] for b in (plan or {}).get("blocks") or []
                         if material.get("material_id") in (b.get("planned_material_ids") or [])]

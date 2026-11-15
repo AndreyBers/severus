@@ -130,6 +130,37 @@ class TraceAnswersTest(unittest.TestCase):
         self.assertEqual(materials["materials"][0]["used_in_blocks"], ["block_02"])
 
 
+class SecondRunTest(unittest.TestCase):
+    """Второй прогон 3 Pro 15.11 (19 вариантов из 25): что ещё теряло варианты."""
+
+    def test_print_required_from_dependencies(self):
+        data = {"variant_id": "v1", "teacher_instructions": ["Подготовьте"], "materials": [
+            {"material_id": "cards", "type": "activity_card", "title": "Карточки", "used_in_blocks": ["block_02"], "audience": "pupils_group",
+             "content": "Текст карточки достаточной длины.", "teacher_notes": "", "dependencies": ["printer", "paper"],
+             "estimated_preparation_minutes": 5},
+            {"material_id": "markers", "type": "props_checklist", "title": "Маркеры", "used_in_blocks": ["block_02"], "audience": "teacher",
+             "content": "Маркеры для доски, по одному на группу.", "teacher_notes": "", "dependencies": ["markers"],
+             "estimated_preparation_minutes": 0}]}
+        fix_output("materials", data, STAGE_MODELS["materials"])
+        STAGE_MODELS["materials"].model_validate(data)
+        self.assertEqual([m["print_required"] for m in data["materials"]], [True, False])
+
+    def test_role_typo_in_plan_block(self):
+        data = {"roles": [{"role_id": "teacher_1"}, {"role_id": "pupils_all"}],
+                "blocks": [{"block_id": "block_02", "role_ids": ["teacher_1", "pups_all"]}]}
+        fixes = fix_output("scenario_plan", data, STAGE_MODELS["scenario_plan"])
+        self.assertEqual(data["blocks"][0]["role_ids"], ["teacher_1", "pupils_all"])
+        self.assertIn({"kind": "ref_fixed", "path": "blocks[0].role_ids", "from": "pups_all", "to": "pupils_all"}, fixes)
+
+    def test_key_with_russian_tail(self):
+        data = {"material_id": "m", "used_in блоков": ["block_01"]}
+        from app.generation.lenient import _fix_dict
+        from app.contracts.llm import Material
+        fixes: list = []
+        _fix_dict(data, Material, "", fixes)
+        self.assertEqual(data.get("used_in_blocks"), ["block_01"])
+
+
 class PipelineGateTest(unittest.TestCase):
     def run_with(self, output_fixes: str):
         """Эталон Дня знаний с ошибками 3 Pro в плане: раздел рядом с `concept` и опечатка в ключе блока."""
