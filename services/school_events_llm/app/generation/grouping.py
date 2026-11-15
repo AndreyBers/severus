@@ -70,12 +70,20 @@ def describe(sizes: list[int]) -> str:
 # Какие блоки получают строку про выступления: по названию и цели блока плана.
 _PRESENT = re.compile(r"выступ|презент|представ|защит|инсцен|ярмарк|показ", re.I)
 _GROUP_WORK = re.compile(r"групп|команд|\bпар(?:а|ы|ах|ами|у)?\b|в парах|станци|совместн|мастерск", re.I)
+_PREPARE = re.compile(r"подготов|репетиц|оформлен", re.I)
 _ORGANIZE = re.compile(r"формирован|организац|делени|распредел|выбор|знакомств|приветств|вступлен|введени|объяснени|рефлекс|итог|заверш"
                        r"|(?:создани|сбор)\w*\s+(?:команд|групп)", re.I)
 
 
+def _presents(block: dict) -> bool:
+    """Блок выступлений - по названию; по цели - только если название не про подготовку: у «Подготовительный этап:
+    репетиции и оформление» цель «реализация идеи выступления», а выступают позже (прогон 15.11)."""
+    title, purpose = str(block.get("title") or ""), str(block.get("purpose") or "")
+    return bool(_PRESENT.search(title)) or (bool(_PRESENT.search(purpose)) and not _PREPARE.search(title))
+
+
 def presentation_budget(mode: str, sizes: list[int], block: dict, minutes: int, grouping_block_ids: list[str],
-                        next_block: dict | None = None) -> str:
+                        later_blocks: list[dict] | None = None) -> str:
     """Минуты на выступление каждой группы или пары для строки блока в промпте; не тот блок - пустая строка.
 
     Четыре финальных прогона и два прогона с правкой промптов 15.11: настоящие INNER-TIMING - все «12 пар по
@@ -84,17 +92,18 @@ def presentation_budget(mode: str, sizes: list[int], block: dict, minutes: int, 
     Только числа, без готовых решений («по желанию»): образец с одним значением модель копирует.
 
     Строку получают блоки выступлений («Представление проектов») и блоки работы групп или пар, после которых
-    нет блока выступлений. Не получают: организационные блоки (формирование команд, приветствие, итоги),
+    нет блока выступлений (`later_blocks` - все следующие блоки: «Исследование» → «Подготовка доклада» →
+    «Представление докладов»). Не получают: организационные блоки (формирование команд, приветствие, итоги),
     блоки короче 4 минут и работа групп перед блоком выступлений - чтобы модель не добавляла туда выступления.
     """
     if mode == "whole_class" or len(sizes) < 2 or minutes < 4:
         return ""
-    text = f"{block.get('title') or ''} {block.get('purpose') or ''}"
-    if _ORGANIZE.search(str(block.get("title") or "")):
+    title = str(block.get("title") or "")
+    if _ORGANIZE.search(title):
         return ""
-    presents_next = bool(next_block) and bool(_PRESENT.search(f"{next_block.get('title') or ''} {next_block.get('purpose') or ''}"))
-    group_work = block.get("block_id") in grouping_block_ids or bool(_GROUP_WORK.search(text))
-    if not _PRESENT.search(text) and not (group_work and not presents_next):
+    presents_later = any(_presents(later) for later in later_blocks or [])
+    group_work = block.get("block_id") in grouping_block_ids or bool(_GROUP_WORK.search(f"{title} {block.get('purpose') or ''}"))
+    if not _presents(block) and not (group_work and not presents_later):
         return ""
     units = len(sizes)
     who = f"всех {units} {plural(units, 'пары', 'пар', 'пар') if mode == 'pairs' else plural(units, 'группы', 'групп', 'групп')}"

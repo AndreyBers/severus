@@ -899,8 +899,8 @@ class Generator:
             mark = "  ← ТЕКУЩИЙ БЛОК" if focus_block == b["block_id"] else ""
             size = f" | реплики педагога: {script_chars(dur)}" if script_chars else ""
             mats = ", ".join(titles.get(mid, mid) for mid in b["planned_material_ids"]) or "-"
-            following = plan["blocks"][index + 1] if index + 1 < len(plan["blocks"]) else None
-            budget = presentation_budget(mode, sizes, b, dur, plan["grouping_request"].get("block_ids", []), following) if timing_hints else ""
+            budget = (presentation_budget(mode, sizes, b, dur, plan["grouping_request"].get("block_ids", []), plan["blocks"][index + 1:])
+                      if timing_hints else "")
             budget = f" | {budget}" if budget else ""
             lines.append(f"- `{b['block_id']}` | {start}–{start + dur} мин ({dur}) | {b['title']} | цель: {b['purpose']} | "
                          f"роли: {', '.join(b['role_ids'])} | материалы: {mats}{size}{budget}{mark}")

@@ -166,12 +166,12 @@ class PresentationBudgetTest(unittest.TestCase):
     def test_numbers(self):
         groups = [6, 6, 6, 6]
         self.assertEqual(presentation_budget("small_groups", groups, {"block_id": "block_03", "title": "Станция Ремёсел"}, 8,
-                                             ["block_03", "block_04"], {"title": "Станция Сказок"}),
+                                             ["block_03", "block_04"], [{"title": "Станция Сказок"}]),
                          "выступления всех 4 групп: не больше 1,5 мин на каждую; работа до них тоже входит в 8 мин")
         # Меньше 2 минут на каждую - одна-две фразы, а для рассказа - меньше команд по 2 минуты (меньше минуты - в секундах:
         # на «меньше 1 мин - не успеют» модель всё равно слушала все пары).
         self.assertEqual(presentation_budget("pairs", [2] * 12 + [3], {"block_id": "block_03", "title": "Декорирование писем в парах"}, 15,
-                                             ["block_03"], {"title": "Подведение итогов"}),
+                                             ["block_03"], [{"title": "Подведение итогов"}]),
                          "выступления всех 13 пар: не больше 1 мин на каждую - хватит на одну-две фразы; "
                          "для рассказа объедините пары в 6 команд по 2 мин")
         self.assertEqual(presentation_budget("pairs", [2] * 12, {"block_id": "block_04", "title": "Представление планов классу"}, 10, []),
@@ -197,11 +197,17 @@ class PresentationBudgetTest(unittest.TestCase):
                  ("small_groups", groups, {"block_id": "block_02", "title": "Создание команд"}, 5, None),
                  ("small_groups", groups, {"block_id": "block_06", "title": "Подведение итогов и рефлексия"}, 8, None),
                  ("small_groups", groups, {"block_id": "block_03", "title": "Представление работ"}, 3, None),
-                 ("small_groups", groups, {"block_id": "block_02", "title": "Творческая мастерская"}, 15, {"title": "Представление работ"}),
+                 ("small_groups", groups, {"block_id": "block_02", "title": "Творческая мастерская"}, 15, [{"title": "Представление работ"}]),
+                 # Подготовка с «выступлением» в цели - не блок выступлений (прогон 15.11, «Подготовительный этап»).
+                 ("pairs", [2] * 11, {"block_id": "block_03", "title": "Подготовительный этап: репетиции и оформление",
+                                      "purpose": "Практическая реализация идеи выступления"}, 15, [{"title": "Выход на сцену: выступление-сюрприз"}]),
+                 # Работа, после которой подготовка, а выступления ещё позже.
+                 ("pairs", [2] * 12, {"block_id": "block_02", "title": "Исследование культурных традиций"}, 10,
+                  [{"title": "Подготовка мини-доклада", "purpose": "Подготовиться к представлению"}, {"title": "Представление мини-докладов"}]),
                  ("small_groups", groups, {"block_id": "block_01", "title": "Рассказ учителя", "purpose": "знакомство с праздником"}, 10, None)]
-        for mode, sizes, block, minutes, following in cases:
+        for mode, sizes, block, minutes, later in cases:
             with self.subTest(title=block["title"], mode=mode):
-                self.assertEqual(presentation_budget(mode, sizes, block, minutes, ["block_02"], following), "")
+                self.assertEqual(presentation_budget(mode, sizes, block, minutes, ["block_02"], later), "")
 
     def test_flag_off_keeps_prompt(self):
         plan = {"variant_id": "v1", "title": "T", "concept": {"summary": "s", "goal": "g", "values_to_mechanics": []},
@@ -264,6 +270,19 @@ class MinutePerUnitTest(unittest.TestCase):
                          ["выступления: 4 групп × 3 мин = 12 мин, а на блок 10 мин"])
         self.assertEqual(self.problems("Все 12 пар выступают по очереди. Каждая пара представит план, по 2 минуты на пару.", pairs=12),
                          ["выступления: 12 пар × 2 мин = 24 мин, а на блок 10 мин"])
+
+    def test_preparation_is_not_presentation(self):
+        """«У каждой пары будет пять минут, чтобы подготовиться к своему выступлению» - пары готовятся одновременно."""
+        text = ("Ребята, сейчас у каждой пары будет пять минут, чтобы подготовиться к своему выступлению. "
+                "Вы можете порепетировать и придумать костюмы.")
+        self.assertEqual(inner_timing_problems({"duration_minutes": 15, "pupil_actions": [], "teacher_script": text},
+                                               groups_count=1, pairs_count=11, next_duration=10), [])
+        # «Чтобы» не сразу после минут - время выступления остаётся (13 пар × 3 мин в 15 минутах).
+        text = ("Сейчас каждая пара представит нам результаты своего исследования. У вас есть три минуты на выступление, "
+                "используйте «Шаблоны для презентаций», чтобы оформить ваши мысли наглядно.")
+        self.assertEqual(inner_timing_problems({"duration_minutes": 15, "pupil_actions": [], "teacher_script": text},
+                                               groups_count=1, pairs_count=13, next_duration=10),
+                         ["выступления: 13 пар × 3 мин = 39 мин, а на блок 15 мин"])
 
     def test_fits_or_not_presentation(self):
         self.assertEqual(self.problems("Каждая пара поделится выводами, примерно в минуту на пару.", pairs=8), [])
