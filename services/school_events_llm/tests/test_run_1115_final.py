@@ -171,8 +171,14 @@ class PresentationBudgetTest(unittest.TestCase):
         self.assertEqual(presentation_budget("pairs", [2] * 12 + [3], {"block_id": "block_03", "title": "Декорирование писем в парах"}, 15,
                                              ["block_03"], {"title": "Подведение итогов"}),
                          "выступления всех 13 пар: не больше 1 мин на каждую; работа до них тоже входит в 15 мин")
+        # Меньше минуты - в секундах (прогон с минутами в промпте: на «меньше 1 мин - не успеют» модель всё равно
+        # слушала все пары); «не успеют» - только меньше 30 секунд.
+        self.assertEqual(presentation_budget("pairs", [2] * 12, {"block_id": "block_04", "title": "Представление планов классу"}, 10, []),
+                         "выступления всех 12 пар: около 45 сек на каждую; работа до них тоже входит в 10 мин")
         self.assertEqual(presentation_budget("pairs", [2] * 10, {"block_id": "block_04", "title": "Микропрезентации"}, 7, []),
-                         "выступления всех 10 пар: меньше 1 мин на каждую - все за 7 мин не успеют")
+                         "выступления всех 10 пар: около 35 сек на каждую; работа до них тоже входит в 7 мин")
+        self.assertEqual(presentation_budget("pairs", [2] * 17, {"block_id": "block_04", "title": "Микропрезентации"}, 7, []),
+                         "выступления всех 17 пар: меньше 30 сек на каждую - все за 7 мин не успеют")
         self.assertEqual(presentation_budget("small_groups", [5] * 21, {"block_id": "block_04", "title": "Выступления команд"}, 45, []),
                          "выступления всех 21 группы: не больше 2 мин на каждую; работа до них тоже входит в 45 мин")
 
@@ -227,6 +233,25 @@ class InnerTimingTest(unittest.TestCase):
         # Если в следующем блоке групп не слушают, выступления остаются частью этого блока.
         self.assertTrue(inner_timing_problems(block, groups_count=6, pairs_count=0, next_duration=10,
                                               next_title="Создание постера", next_text="Теперь все вместе соберём общий постер."))
+
+
+class MinutePerUnitTest(unittest.TestCase):
+    """«Прошу уложиться примерно в минуту на пару» при 17 парах в блоке на 10 минут (прогон с минутами в промпте 15.11)."""
+
+    def problems(self, text: str, pairs: int = 0, groups: int = 1) -> list[str]:
+        block = {"duration_minutes": 10, "pupil_actions": [], "teacher_script": text}
+        return inner_timing_problems(block, groups_count=groups, pairs_count=pairs, next_duration=10)
+
+    def test_minute_forms(self):
+        text = ("Каждая пара коротко поделится своими выводами. Помните, у нас всего десять минут, "
+                "поэтому прошу уложиться примерно в минуту на пару.")
+        self.assertEqual(self.problems(text, pairs=17), ["выступления: 17 пар × 1 мин = 17 мин, а на блок 10 мин"])
+        self.assertEqual(self.problems("Каждая команда представит проект: минута на каждую команду.", groups=12),
+                         ["выступления: 12 групп × 1 мин = 12 мин, а на блок 10 мин"])
+
+    def test_fits_or_not_presentation(self):
+        self.assertEqual(self.problems("Каждая пара поделится выводами, примерно в минуту на пару.", pairs=8), [])
+        self.assertEqual(self.problems("У вас минута на обсуждение в группе, потом начнём.", groups=12), [])
 
 
 def block_issues(text: str, event_id: str) -> set[str]:

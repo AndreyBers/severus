@@ -100,6 +100,11 @@ def presentation_budget(mode: str, sizes: list[int], block: dict, minutes: int, 
     who = f"всех {units} {plural(units, 'пары', 'пар', 'пар') if mode == 'pairs' else plural(units, 'группы', 'групп', 'групп')}"
     per = math.floor((minutes - 1) / units * 2) / 2
     if per < 1:
-        return f"выступления {who}: меньше 1 мин на каждую - все за {minutes} мин не успеют"
+        # Меньше минуты - в секундах: 12 пар за 10 минут - около 45 секунд, для короткого ответа это реально.
+        # Прогон с минутами в промпте: на «меньше 1 мин - не успеют» модель всё равно слушала все пары.
+        seconds = math.floor((minutes - 1) * 60 / units / 5) * 5
+        if seconds >= 30:
+            return f"выступления {who}: около {seconds} сек на каждую; работа до них тоже входит в {minutes} мин"
+        return f"выступления {who}: меньше 30 сек на каждую - все за {minutes} мин не успеют"
     per_txt = str(int(per)) if per == int(per) else str(per).replace(".", ",")
     return f"выступления {who}: не больше {per_txt} мин на каждую; работа до них тоже входит в {minutes} мин"
