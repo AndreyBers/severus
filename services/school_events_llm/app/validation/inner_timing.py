@@ -64,6 +64,11 @@ _WORK_PURPOSE = re.compile(r"\bна\s+(?:оформлени|подготовк|�
 _WITHIN_PAIR = re.compile(r"друг\s+с\s+другом|партн[её]р\w*|соседу\b|соседом\s+по\s+парт|в\s+(?:своей\s+)?паре\b", re.I)
 _TO_CLASS = re.compile(r"остальн\w*\s+(?:\w+\s+)?слуша|перед\s+(?:всем\s+)?классом|всему\s+классу|\bклассу\b|выход\w*\s+к\s+доске", re.I)
 _NOT_ALL = re.compile(r"по желанию|желающ|не все|несколько (?:групп|команд|пар)|\d\s*[-\u2013]\s*\d\s+(?:групп|команд|пар)|одна-две|две-три", re.I)
+# Выступают не все, а названное число: «выступят 4 пары», «4 команды по желанию»; если оно меньше числа групп или пар,
+# считается оно. Пары или группы, объединённые в команды («объедините пары в 4 команды»), выступают командами.
+_SUBSET = re.compile(r"(?:только|лишь|успеют|выступ\w*|выйдут|представ\w*|расскаж\w*)\s+(?:\w+\s+)?" + _NUM + r"\s+(?:групп|команд|пар)"
+                     + r"|" + _NUM + r"\s+(?:групп|команд|пар)\w*\s+(?:по\s+желанию|выступ|расскаж|представ|выйд)", re.I)
+_MERGED = re.compile(r"объедин\w*\s+(?:\w+\s+){0,4}?в\s+" + _NUM + r"\s+(?:команд|групп)", re.I)
 _INTERVAL = re.compile(
     r"(?:у\s+вас|вам)\s+(?:есть\s+|будет\s+|даётся\s+|дается\s+|всего\s+|примерно\s+|ровно\s+){0,2}" + _RANGE + _MIN
     + r"|(?:даётся|дается|отводится|отведено)\s+(?:\w+\s+){0,2}?" + _RANGE + _MIN
@@ -195,6 +200,10 @@ def inner_timing_problems(block: dict[str, Any], *, groups_count: int, pairs_cou
     text = re.sub(r"\b(?:примерно\s+|около\s+)?в\s+(?:одну\s+)?минуту\s+(?=на\s+(?:кажд|пар|групп|команд))", "по 1 минуте ", text, flags=re.I)
     text = re.sub(r"(?<![\d\w] )(?<!\d)\bминут[ау]\s+(?=на\s+(?:кажд|пар|групп|команд))", "по 1 минуте ", text, flags=re.I)
     problems: list[str] = []
+    merged = _MERGED.search(text)
+    teams = int(_first_number(merged) or 0) if merged else 0
+    if teams >= 2:
+        groups_count, pairs_count = teams, 0
 
     # 0. Станции по кругу: команды работают одновременно, но каждая проходит все станции подряд, поэтому круг
     # занимает «число станций × минуты на станцию» (замечание QA 14.11, BUG-18: сообщение говорило о выступлениях групп).
@@ -232,6 +241,10 @@ def inner_timing_problems(block: dict[str, Any], *, groups_count: int, pairs_cou
             units, label = groups_count, "групп"
         else:
             continue
+        subset = _SUBSET.search(sentence)
+        named = _first_number(subset) if subset else None
+        if named and 1 <= named < units:
+            units = int(named)
         total = units * minutes
         if total > duration:
             problems.append(f"выступления: {units} {label} × {_fmt(minutes)} мин = {_fmt(total)} мин, а на блок {duration} мин")
