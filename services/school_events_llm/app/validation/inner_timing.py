@@ -71,6 +71,14 @@ _INTERVAL = re.compile(
     re.I,
 )
 _SENTENCE = re.compile(r"[^.!?\n]+[.!?\n]?")
+# Время всего занятия, а не отрезок работы: «На занятие нам отведено 45 минут» во вводном блоке (ложное
+# INNER-TIMING «45 = 45 мин» в третьем финальном прогоне 15.11, День Победы), «классный час продлится 30 минут».
+_WHOLE_LESSON = re.compile(
+    r"\bна\s+(?:наш\w*\s+|сегодняшн\w*\s+|вс[её]\s+)?(?:занятие|урок|классный\s+час|мероприятие|встречу)\s+"
+    r"(?:\w+\s+){0,2}?(?:отведено|отводится|даётся|дается|есть|у\s+нас|нам|вам)"
+    r"|\b(?:занятие|урок|классный\s+час|мероприятие|встреча)\s+(?:\w+\s+){0,2}?(?:продлится|длится|займ[её]т|рассчитан\w*)",
+    re.I,
+)
 # Переход команд между станциями: «перемещаетесь на следующую станцию», «по кругу», «маршрут».
 _ROTATION = re.compile(r"(?:перемещ|переход|перейд|меня)\w*\s+(?:\w+\s+){0,3}?(?:на\s+)?следующ\w*\s+станци|по\s+кругу|по\s+маршрут|станци\w*\s+по\s+очеред", re.I)
 _STATION_TIME = re.compile(r"(?:на\s+)?кажд\w*\s+станци\w*\s+(?:\w+\s+){0,4}?" + _RANGE + _MIN + r"|" + _RANGE + _MIN + r"\s+на\s+(?:кажд\w*\s+)?станци", re.I)
@@ -83,11 +91,23 @@ _CARDINALS = {"две": 2, "двух": 2, "три": 3, "трех": 3, "трёх"
 _NEXT_PRESENTS = re.compile(
     r"кажд\w*\s+(?:\w+\s+){0,2}?(?:групп|команд|отряд|экспедици)\w*\s+(?:\w+\s+){0,3}?(?:представ|выступ|расскаж|покаж|защит|подел)"
     r"|(?:выступлени|презентаци|защит)\w*\s+(?:\w+\s+)?кажд\w*\s+(?:групп|команд)"
-    r"|(?:групп|команд|спикер)\w*\s+(?:\w+\s+){0,2}?(?:представляют|выступают|рассказывают|защищают)"
+    r"|(?:групп|команд|спикер)\w*\s+(?:\w+\s+){0,2}?(?:представляю?т|выступаю?т|рассказываю?т|защищаю?т)"
+    # «Давайте начнём с вашей группы… послушаем группу номер два» (третий финальный прогон 15.11, День Свердловской области).
+    r"|(?:послуша\w*|начн[её]м\s+с)\s+(?:\w+\s+){0,2}?(?:групп|команд)"
     r"|(?:дети|ученики)\s+(?:\w+\s+)?представляют\s+(?:результат|итог|свои\s+(?:находк|работ|маршрут|проект))"
     r"|(?:перв|втор)\w*\s+(?:групп|команд)\w*[,!]?\s+(?:\w+\s+){0,2}?(?:представ|выступ|расскаж|покаж|начина)",
     re.I,
 )
+
+
+def _work_intervals(text: str) -> list[re.Match[str]]:
+    """Отрезки «у вас N минут», кроме времени всего занятия («На занятие нам отведено 45 минут»)."""
+    found = []
+    for sentence in _SENTENCE.finditer(text):
+        if _WHOLE_LESSON.search(sentence.group(0)):
+            continue
+        found += [m for m in _INTERVAL.finditer(text, sentence.start(), sentence.end())]
+    return found
 
 
 def _presented_next(next_text: str) -> bool:
@@ -97,7 +117,7 @@ def _presented_next(next_text: str) -> bool:
     представит предложение» - нет: перед выступлением своя работа, выступают с ней.
     """
     match = _NEXT_PRESENTS.search(next_text)
-    return bool(match) and not _INTERVAL.search(next_text[:match.start()])
+    return bool(match) and not _work_intervals(next_text[:match.start()])
 
 
 def _value(token: str | None) -> float | None:
@@ -137,7 +157,7 @@ def _station_count(text: str) -> int:
 def _intervals(text: str, duration: int, next_duration: int) -> list[str]:
     """Правило 2: сумма отрезков «у вас N минут» больше длительности блока и следующего блока."""
     values: list[float] = []
-    for match in _INTERVAL.finditer(text):
+    for match in _work_intervals(text):
         value = _first_number(match)
         if value and (not values or values[-1] != value):
             values.append(value)
@@ -217,7 +237,8 @@ def inner_timing_problems(block: dict[str, Any], *, groups_count: int, pairs_cou
     # 3. Работа, а потом выступления всех групп без регламента: «даётся 10 минут. Затем каждая команда
     # представит коллаж» в 12-минутном этапе с 4 командами - на выступление меньше минуты на команду.
     # «Время на выступления - 8 минут» - это само время выступлений, а не работа перед ними.
-    first_interval = _INTERVAL.search(text)
+    intervals = _work_intervals(text)
+    first_interval = intervals[0] if intervals else None
     if first_interval and re.search(r"выступлен|презентац|защит|представлен", first_interval.group(0), re.I):
         first_interval = None
     if (not problems and groups_count > 1 and first_interval and not _PER_UNIT.search(text)

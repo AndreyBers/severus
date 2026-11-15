@@ -9,6 +9,9 @@
 - Третий (25 из 25): расходники вне словаря попадали в заметку педагогу по-английски («Также понадобится: colored
   pensils», «sequins, ленты, cardboard figures», «audience ballot»), а в шаблоне стены памяти стояла подпись
   «Класс 9-а, 2023 год».
+- Четвёртый (25 из 25): два ложных INNER-TIMING. «На занятие нам отведено 45 минут» во вводном блоке считалось
+  отрезком работы; «Затем каждая группа представит свои находки» - выступлением этого блока, хотя группы выступают
+  в следующем («Давайте начнём с вашей группы… (Группа представляет…) …послушаем группу номер два»).
 """
 
 import copy
@@ -21,6 +24,7 @@ from app.contracts.llm import STAGE_MODELS
 from app.generation.dates import YEAR
 from app.generation.humanize import blank_template_dates
 from app.generation.ids import normalize_dependencies, untranslated_things
+from app.validation.inner_timing import inner_timing_problems
 from app.generation.pipeline import _audience, prepare_stage_output
 from app.llm.jsonx import extract_json
 from app.validation.checks import title_dates, validate_variant
@@ -114,6 +118,31 @@ class ThingsTest(unittest.TestCase):
         self.assertEqual(variant["materials"][0]["content"],
                          'Верхний заголовок: "Наша Стена Памяти", внизу подпись: "Класс 9-а, 20__ год". Между ячейками поля.')
         self.assertEqual(variant["materials"][1]["content"], 'Надпись: "Победа, 1945 год".')
+
+
+class InnerTimingTest(unittest.TestCase):
+    def test_whole_lesson_is_not_interval(self):
+        intro = {"duration_minutes": 5, "pupil_actions": [], "teacher_script":
+                 "Сегодня мы будем исследовать документы. На занятие нам отведено 45 минут. Сначала разделимся на четыре группы."}
+        self.assertEqual(inner_timing_problems(intro, groups_count=4, pairs_count=0, next_duration=15), [])
+        for text in ("Наш классный час продлится 30 минут.", "Урок рассчитан на 40 минут."):
+            with self.subTest(text=text):
+                block = {"duration_minutes": 5, "pupil_actions": [], "teacher_script": text}
+                self.assertEqual(inner_timing_problems(block, groups_count=1, pairs_count=0, next_duration=10), [])
+        # Отрезок работы, а не всё занятие, по-прежнему считается.
+        work = {"duration_minutes": 5, "pupil_actions": [], "teacher_script": "На выполнение задания у вас 25 минут."}
+        self.assertTrue(inner_timing_problems(work, groups_count=1, pairs_count=0, next_duration=10))
+
+    def test_groups_present_in_next_block(self):
+        block = {"duration_minutes": 15, "pupil_actions": ["Изучают материалы в малой группе"], "teacher_script":
+                 "«Сейчас вы получите комплекты документов. На это вам даётся 10 минут. Затем каждая группа представит свои находки классу.»"}
+        next_text = ("(Подходит к группе 1) \"Ребята, давайте начнём с вашей группы. Что интересного вы нашли?\" "
+                     "(Группа представляет, учитель фиксирует ключевые моменты) \"Теперь послушаем группу номер два.\"")
+        self.assertEqual(inner_timing_problems(block, groups_count=6, pairs_count=0, next_duration=10,
+                                               next_title="Обсуждение находок", next_text=next_text), [])
+        # Если в следующем блоке групп не слушают, выступления остаются частью этого блока.
+        self.assertTrue(inner_timing_problems(block, groups_count=6, pairs_count=0, next_duration=10,
+                                              next_title="Создание постера", next_text="Теперь все вместе соберём общий постер."))
 
 
 def block_issues(text: str, event_id: str) -> set[str]:
