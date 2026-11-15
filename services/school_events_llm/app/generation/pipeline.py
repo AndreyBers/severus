@@ -1386,7 +1386,7 @@ class Generator:
         project_id = project_id or ("evt_" + job_id[4:])
         n = normalize(raw_request, self.catalog, self.settings, context_mode=context_mode, cultural_context=cultural_context,
                       experiment_tag=experiment_tag, experiment_pair_id=experiment_pair_id)
-        meta = {"job_id": job_id}
+        meta = {"job_id": job_id, "event_id": n.event_id}
         self.trace.write_json("input.json", raw_request)
         self.trace.write_json("normalized_request.json", n.to_dict())
         self.trace.event("job_started", job_id=job_id, event_id=n.event_id, variants=n.variants_count)
