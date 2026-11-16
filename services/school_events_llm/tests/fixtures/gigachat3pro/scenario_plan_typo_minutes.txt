@@ -1,0 +1,77 @@
+{
+  "schema_version": "1.2",
+  "task": "scenario_plan",
+  "variant_id": "v2",
+  "title": "Голос прошлого: письма защитникам",
+  "concept": {
+    "summary": "Ученики читают короткие фрагменты писем времён службы, ищут общие чувства и ценности, затем создают коллективную памятную открытку ветеранам и военнослужащим региона.",
+    "goal": "Через работу с историческими свидетельствами сформировать уважение к опыту защитников и выразить благодарность через общее послание.",
+    "tasks": [
+      "Научиться видеть в письмах разных лет универсальные человеческие качества — заботу, ответственность, надежду.",
+      "Сформировать навык совместного выражения благодарности и уважения через коллективный творческий продукт."
+    ],
+    "expected_outcomes": ["Общая памятная открытка с обращением к защитникам от класса.", "Карта чувств и ценностей из писем на доске или листе А3."]
+  },
+  "grouping_request": {"mode": "small_groups", "groups_count": 5, "block_ids": ["block_03"]},
+  "roles": [
+    {"role_id": "teacher_1", "participant_type": "teacher", "title": "Ведущий педагог", "count": 1},
+    {"role_id": "pupils_all", "participant_type": "pupils_group", "title": "Учащиеся", "count": 25}
+  ],
+  "blocks": [
+    {
+      "block_id": "block_01",
+      "title": "Вход и цель",
+      "purpose": "Знакомство с форматом дня, формулировка общей цели занятия.",
+      "proposed_minutes": 5,
+      "role_ids": ["teacher_1", "pupils_all"],
+      "planned_material_ids": []
+    },
+    {
+      "block_id": "block_02",
+      "title": "Письма из прошлого",
+      "purpose": "Работа с короткими фрагментами писем для поиска общих чувств и качеств.",
+      "proposed_minutes": 8,
+      "role_ids": ["teacher_1", "pupils_all"],
+      "planned_material_ids": ["card_task"]
+    },
+    {
+      "block_id": "block_03",
+      "title": "Создание открытки",
+      "purpose": "Совместное создание памятной открытки на основе идей из писем.",
+      "proposed_minutes": 15,
+      "role_ids": ["teacher_1", "pupils_all"],
+      "planned_material_ids": ["paper", "markers"]
+    },
+    {
+      "block_id": "block_04",
+      "title": "Завершение и обещание помнить",
+      "purpose": "Рефлексия, подведение итогов, краткое выступление перед классом.",
+      "proposed_minutes": 6,
+      "role_ids": ["teacher_1", "pupils_all"],
+      "planned_material_ids": []
+    }
+  ],
+  "values_to_mechanics": [
+    {
+      "value_id": "historical_memory",
+      "mechanic_type": "source_work",
+      "mechanic": "Чтение фрагментов писем помогает почувствовать опыт людей разных поколений и увидеть преемственность человеческих ценностей.",
+      "block_ids": ["block_02"]
+    },
+    {
+      "value_id": "citizenship",
+      "mechanic_type": "class_collective_task",
+      "mechanic": "Все вместе договариваются о тексте и оформлении открытки как общем выражении благодарности.",
+      "block_ids": ["block_03"]
+    }
+  ],
+  "planned_materials": [
+    {
+      "material_id": "card_task",
+      "type": "activity_card",
+      "title": "Карточки заданий",
+      "purpose": "Для чтения коротких анонимных отрывков писем и отметки чувств/ценностей."
+    }
+  ]
+}
+```

@@ -13,6 +13,7 @@ from .catalog import Catalog
 from .generation.grouping import describe
 from .normalize import NormalizedRequest
 from .validation.checks import Issue, report_status
+from .validation.issue_format import issue_report
 
 SCHEMA_VERSION_02 = "1.2"
 
@@ -122,7 +123,7 @@ def render_variant(v: dict[str, Any], n: NormalizedRequest, catalog: Catalog, is
     variant["sources"] = sources
     variant["quality_report"] = {
         "status": report_status(issues),
-        "issues": [{"code": i.code, "severity": i.severity, "location": i.location, "message": i.message} for i in issues],
+        "issues": issue_report(issues),
         "checked_at": checked_at or now_iso(),
     }
     return variant

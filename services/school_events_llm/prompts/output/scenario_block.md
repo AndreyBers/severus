@@ -1,7 +1,7 @@
-<!-- id: output.scenario_block | version: 1.2.0 -->
+<!-- id: output.scenario_block | version: 1.3.0 -->
 ## Формат ответа
 
-Верни один JSON-объект для блока `{{block_id}}` варианта `{{variant_id}}`. Время, ID, роли и материалы - как в плане.
+Верни один JSON-объект для блока `{{block_id}}` варианта `{{variant_id}}`. Время, `block_id` и роли - как в плане; `material_ids` оставь пустым: материалы блока программа берёт из плана.
 
 ```json
 {
@@ -14,7 +14,7 @@
     "duration_minutes": {{block_minutes}},
     "title": "Как в плане",
     "purpose": "Как в плане",
-    "teacher_script": "Полный текст для педагога: реплики в кавычках, действия в скобках. Объём {{script_min_chars}}.",
+    "teacher_script": "Полный текст для педагога: реплики в кавычках, действия в скобках{{materials_hint}}. Объём {{script_min_chars}}.",
     "pupil_actions": ["Что делают ученики сначала (в каком составе)", "Что делают дальше и что получается"],
     "role_ids": ["teacher_1", "pupils_all"],
     "material_ids": []

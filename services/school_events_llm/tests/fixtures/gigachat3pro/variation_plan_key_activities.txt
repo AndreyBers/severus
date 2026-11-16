@@ -1,0 +1,80 @@
+{
+  "schema_version": "1.2",
+  "task": "variation_plan",
+  "concepts": [
+    {
+      "variant_id": "v1",
+      "title": "Мастерская новогодних традиций",
+      "summary": "Дети и родители вместе создают плакат с традициями класса, рисуют пожелания и оформляют класс к празднику.",
+      "narrative_approach": "Начинаем с обсуждения любимых семейных зимних обычаев, затем переходим к созданию общего украшения для класса.",
+      "primary_mechanic": "joint_product",
+      "engagement_mode": "small_groups",
+      "planned_structure": [
+        {"order": 1, "title": "Вход: зимние традиции", "activity_type": "discussion", "approx_minutes": 5},
+        {"order": 2, "title": "Творческая мастерская", "activity_type": "creative_product", "approx_minutes": 13},
+        {"order": 3, "title": "Оформление класса", "activity_type": "class_collective_task", "approx_minutes": 8},
+        {"order": 4, "title": "Итоговый круг", "activity_type": "reflection", "approx_minutes": 4}
+      ],
+      "key_activities": [
+        {"activity_type": "team_task", "description": "Группы придумывают название и выбирают одну-две семейные или книжные новогодние традиции; каждый участник рисует символ этой традиции на общем листе ватмана."},
+        {"activity_type": "individual_task", "description": "Каждый пишет короткое пожелание классу на стикере и наклеивает его на плакат."},
+        {"activity_type": "pair_task", "description": "Пары помогают друг другу вырезать снежинки из бумаги по трафарету, подготовленному педагогом."}
+      ],
+      "distinctive_result": "Общий плакат «Традиции нашего класса» со стикерами-пожеланиями и гирлянда из бумажных снежинок, которую можно повесить в классе.",
+      "differs_from": [
+        {"variant_id": "v2", "difference": "Здесь акцент на совместном создании продукта всей группой, а не на квесте или игре с заданиями по станциям."}
+      ],
+      "values_to_mechanics": [
+        {"value_id": "family", "mechanic_type": "family_research", "mechanic": "Участники рассказывают о семейной традиции (по желанию) и рисуют её символ на общем плакате; есть альтернатива — рассказать о традиции героя книги или придумать свою."},
+        {"value_id": "labour_creation", "mechanic_type": "joint_product", "mechanic": "Создание коллективного плаката и оформление класса как общий результат труда детей и родителей."}
+      ]
+    },
+    {
+      "variant_id": "v2",
+      "title": "Квест-цепочка пожеланий",
+      "summary": "Класс проходит цепочку коротких станций-заданий, чтобы собрать и оформить общую коробку добрых пожеланий.",
+      "narrative_approach": "Сюжет начинается с письма от Деда Мороза с просьбой помочь наполнить волшебную коробку желаниями и добрыми словами.",
+      "primary_mechanic": "quest_route",
+      "engagement_mode": "pairs",
+      "planned_structure": [
+        {"order": 1, "title": "Вводная история", "activity_type": "storytelling", "approx_minutes": 3},
+        {"order": 2, "title": "Станция рисунков", "activity_type": "creative_workshop", "approx_minutes": 7},
+        {"order": 3, "title": "Станция слов", "activity_type": "writing_practice", "approx_minutes": 9},
+        {"order": 4, "title": "Сборка подарка", "activity_type": "class_collective_task", "approx_minutes": 6},
+        {"order": 5, "title": "Финал-круг", "activity_type": "reflection", "approx_minutes": 5}
+      ],
+      "key_activities": {"activity_type": "game", "description": "На каждой станции пары выполняют задание: нарисовать рисунок, написать пожелание, отгадать зимнюю загадку."},
+      "distinctive_result": "Декоративная коробка с вложенными рисунками и записками-пожеланиями, которая останется в классе до каникул.",
+      "differs_from": [
+        {"variant_id": "v1", "difference": "Основной формат — перемещение между короткими игровыми станциями парами, итог — сборный продукт в коробке, а не один большой плакат."}
+      ],
+      "values_to_mechanics": [
+        {"value_id": "family", "mechanic_type": "family_research", "mechanic": "Для части заданий предлагается вспомнить семейную новогоднюю традицию или любимого персонажа книг, но это необязательно; всегда есть вариант придумать своё пожелание."},
+        {"value_id": "labour_creation", "mechanic_type": "joint_product", "mechanic": "Совместное изготовление коробки и наполнение её рисунками и записками всего класса."}
+      ]
+    },
+    {
+      "variant_id": "v3",
+      "title": "Новогодний экспресс-планер",
+      "summary": "Вместе составляем план весёлых дел на каникулы и делаем памятку каждому ученику.",
+      "narrative_approach": "Представим, что мы поезд, который отправляется в путешествие по каникулам — обсуждаем идеи и записываем их в маршрутный лист.",
+      "primary_mechanic": "collaborative_planning",
+      "engagement_mode": "whole_class",
+      "planned_structure": [
+        {"order": 1, "title": "Начало пути", "activity_type": "brainstorming", "approx_minutes": 5},
+        {"order": 2, "title": "Маршрутный лист", "activity_type": "creative_product", "approx_minutes": 10},
+        {"order": 3, "title": "Раздача листов", "activity_type": "distribution_task", "approx_minutes": 8},
+        {"order": 4, "title": "Завершение круга", "activity_type": "reflection", "approx_minutes": 7}
+      ],
+      "key_activities": {"activity_type": "team_task", "description": "Весь класс предлагает идеи для каникул (игры, чтение, прогулки), педагог фиксирует самые популярные варианты на доске, дети переносят их в свой мини-планер."},
+      "distinctive_result": "Памятки-планеры с тремя идеями каникул у каждого ребёнка и общий список идей класса на стенде.",
+      "differs_from": [
+        {"variant_id": "v1", "difference": "Результат — индивидуальные памятки и общий список, а не украшение класса или общая коробка."}
+      ],
+      "values_to_mechanics": [
+        {"value_id": "family", "mechanic_type": "discussion", "mechanic": "Вопросы строятся так, чтобы дети могли упомянуть семью по желанию (например: «С кем бы ты хотел поиграть?»); всегда есть возможность выбрать взрослого из школы или друга вместо семьи."},
+        {"value_id": "labour_creation", "mechanic_type": "joint_product", "mechanic": "Коллективное создание списка идей и раздача индивидуальных памяток детям как общий труд класса."}
+      ]
+    }
+  ]
+}
